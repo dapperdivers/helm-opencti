@@ -235,6 +235,13 @@ opensearch:
 # -- RabbitMQ subchart (Bitnami)
 rabbitmq:
   enabled: true
+  image:
+    registry: docker.io
+    repository: bitnami/rabbitmq
+    # NOTE: Bitnami removed images from docker.io in Aug 2025.
+    # If image pull fails, override to bitnamilegacy/rabbitmq or use
+    # the official rabbitmq image with appropriate config.
+    # tag: ""  # uses chart appVersion default
   auth:
     username: user
     # password: set via --set rabbitmq.auth.password=XXX
