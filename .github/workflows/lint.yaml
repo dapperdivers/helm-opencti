@@ -14,6 +14,12 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
 
+      - name: Add Helm repos
+        run: |
+          helm repo add opensearch https://opensearch-project.github.io/helm-charts/
+          helm repo add minio https://charts.min.io/
+          helm repo update
+
       - name: Lint
         run: |
           cd charts

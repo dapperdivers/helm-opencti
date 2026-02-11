@@ -31,6 +31,12 @@ jobs:
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: Add Helm repos
+        run: |
+          helm repo add opensearch https://opensearch-project.github.io/helm-charts/
+          helm repo add minio https://charts.min.io/
+          helm repo update
+
       - name: Package chart
         run: |
           cd charts
