@@ -58,6 +58,14 @@ spec:
             - name: {{ $key | upper }}
               value: {{ $value | quote }}
             {{- end }}
+            {{- /* Per-connector secret env injection */}}
+            {{- range $envName, $secretRef := ($connector.envFromSecrets | default dict) }}
+            - name: {{ $envName }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretRef.name }}
+                  key: {{ $secretRef.key }}
+            {{- end }}
           {{- with $connector.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
