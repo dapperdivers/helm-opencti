@@ -33,6 +33,69 @@ helm install opencti oci://ghcr.io/dapperdivers/helm-opencti/opencti \
   --set externalRedis.hostname=your-redis-host
 ```
 
+## Flux CD / GitOps
+
+### OCI HelmRepository
+
+> **Important:** The `type: oci` field is required. Without it, Flux treats the URL as a traditional HTTP chart repository.
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: opencti
+  namespace: flux-system
+spec:
+  type: oci                        # ← Required for OCI registries!
+  interval: 1h
+  url: oci://ghcr.io/dapperdivers/helm-opencti
+```
+
+### HelmRelease
+
+```yaml
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: opencti
+  namespace: opencti
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: opencti
+      version: "0.4.x"            # semver range — picks latest 0.4.x
+      sourceRef:
+        kind: HelmRepository
+        name: opencti
+        namespace: flux-system
+  values:
+    opencti:
+      adminTokenExistingSecret:
+        name: opencti-credentials
+        key: admin-token
+    externalRedis:
+      enabled: true
+      hostname: dragonfly.database.svc.cluster.local
+    server:
+      ingress:
+        enabled: true
+        className: internal         # Check yours: kubectl get ingressclass
+        hosts:
+          - host: opencti.example.com
+            paths:
+              - path: /
+                pathType: Prefix
+```
+
+> **⚠️ OCI reconciliation gotcha:** `flux reconcile source helm opencti` does **NOT** work for OCI HelmRepositories. To force an update, use suspend/resume:
+> ```bash
+> flux suspend source helm opencti && flux resume source helm opencti
+> ```
+> Or just rely on the `interval` to pick up new versions automatically.
+
+> **💡 Ingress class:** Check your cluster's available ingress class names with `kubectl get ingressclass`. Common values: `nginx`, `internal`, `traefik`, `cilium`.
+
 ## Architecture
 
 ```

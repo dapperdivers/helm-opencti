@@ -88,7 +88,7 @@ Elasticsearch/OpenSearch URL — auto-wired from subchart or external config
 {{- if .Values.externalElasticsearch.enabled -}}
   {{- .Values.externalElasticsearch.url -}}
 {{- else if .Values.opensearch.enabled -}}
-  http://{{ .Values.opensearch.fullnameOverride | default "opensearch-cluster-master" }}:9200
+  http://{{ .Values.opensearch.fullnameOverride | default (printf "%s-opensearch-cluster-master" .Release.Name) }}:9200
 {{- else -}}
   {{- fail "Either opensearch.enabled or externalElasticsearch.enabled must be true" -}}
 {{- end -}}
@@ -304,18 +304,18 @@ Build the auto-wired environment variables for the server
   value: {{ .Values.minio.rootPassword | default "minioadmin" | quote }}
   {{- end }}
 {{- end }}
-{{- if .Values.externalS3.bucketName }}
 - name: MINIO__BUCKET_NAME
-  value: {{ .Values.externalS3.bucketName | quote }}
-{{- end }}
+  value: {{ if .Values.externalS3.enabled }}{{ .Values.externalS3.bucketName | default "opencti-bucket" | quote }}{{ else }}{{ "opencti-bucket" | quote }}{{ end }}
 {{- if .Values.externalS3.region }}
 - name: MINIO__BUCKET_REGION
   value: {{ .Values.externalS3.region | quote }}
 {{- end }}
-{{- if .Values.externalS3.useSSL }}
 - name: MINIO__USE_SSL
+  {{- if and .Values.externalS3.enabled .Values.externalS3.useSSL }}
   value: "true"
-{{- end }}
+  {{- else }}
+  value: "false"
+  {{- end }}
 # -- Auth provider
 - name: PROVIDERS__LOCAL__STRATEGY
   value: "LocalStrategy"
