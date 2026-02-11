@@ -165,7 +165,7 @@ MinIO/S3 — auto-wired from subchart or external config
 {{- if .Values.externalS3.enabled -}}
   {{- .Values.externalS3.endpoint -}}
 {{- else if .Values.minio.enabled -}}
-  {{- include "opencti.fullname" . }}-minio:9000
+  {{- printf "http://%s-minio:9000" (include "opencti.fullname" .) -}}
 {{- else -}}
   {{- fail "Either minio.enabled or externalS3.enabled must be true" -}}
 {{- end -}}
