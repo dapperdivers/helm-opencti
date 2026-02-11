@@ -4,7 +4,7 @@ description: |
   OpenCTI Helm chart with auto-wiring, external service support, and sane defaults.
   Built on lessons learned from devops-ia/helm-opencti.
 type: application
-version: 0.2.1
+version: 0.2.2
 appVersion: 6.4.12
 home: https://github.com/dapperdivers/helm-opencti
 maintainers:
@@ -20,7 +20,7 @@ keywords:
   - cti
 dependencies:
   - name: opensearch
-    version: 2.28.0
+    version: 3.4.0
     repository: https://opensearch-project.github.io/helm-charts/
     condition: opensearch.enabled
   - name: minio

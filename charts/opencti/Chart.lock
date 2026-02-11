@@ -1,9 +1,9 @@
 dependencies:
 - name: opensearch
   repository: https://opensearch-project.github.io/helm-charts/
-  version: 2.28.0
+  version: 3.4.0
 - name: minio
   repository: https://charts.min.io/
   version: 5.4.0
-digest: sha256:8cc5ade4cdaab4b56df0b8fd71c6165c69630ba6ff344376d11fc16caf1fc0ba
-generated: "2026-02-11T10:59:33.752597391-06:00"
+digest: sha256:6075f7bc61752db2fd7f0f5ce067e9300bdaba43c33b4659fbf73357d989e296
+generated: "2026-02-11T11:44:24.705465535-06:00"
