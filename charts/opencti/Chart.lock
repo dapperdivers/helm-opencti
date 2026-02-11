@@ -1,0 +1,12 @@
+dependencies:
+- name: opensearch
+  repository: https://opensearch-project.github.io/helm-charts/
+  version: 2.28.0
+- name: rabbitmq
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 16.0.13
+- name: minio
+  repository: https://charts.min.io/
+  version: 5.4.0
+digest: sha256:e76a98f60230b5feffedc515157242a16188a6beb7d81c05e517db33be362688
+generated: "2026-02-11T02:06:01.894309425-06:00"

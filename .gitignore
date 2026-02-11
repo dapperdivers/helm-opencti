@@ -1,2 +1,3 @@
-charts/opencti/charts/
-charts/opencti/Chart.lock
+# Subchart tarballs included for Flux GitRepository compatibility
+# charts/opencti/charts/
+# charts/opencti/Chart.lock
