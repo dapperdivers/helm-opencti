@@ -24,13 +24,9 @@ The community `devops-ia/helm-opencti` chart works, but has friction:
 ## Quick Start
 
 ```bash
-# Add dependencies
-helm dependency update ./charts/opencti
-
-# Install with free threat intel connectors
-helm install opencti ./charts/opencti \
+# Install from OCI registry
+helm install opencti oci://ghcr.io/dapperdivers/helm-opencti/opencti \
   -n opencti --create-namespace \
-  -f charts/opencti/connector-presets/free-threat-intel.yaml \
   --set opencti.adminPassword=changeme \
   --set opencti.adminToken=$(uuidgen) \
   --set rabbitmq.auth.password=changeme \
@@ -74,6 +70,20 @@ These values are automatically propagated to:
 - ✅ All worker pods
 - ✅ Every connector
 
+### Dedicated Connector Token
+
+Use a separate token for connectors (least-privilege):
+
+```yaml
+opencti:
+  adminTokenExistingSecret:
+    name: opencti-secrets
+    key: admin-token
+  connectorTokenExistingSecret:
+    name: opencti-secrets
+    key: connector-token
+```
+
 ### External Services
 
 Instead of raw env vars, use structured config blocks:
@@ -113,19 +123,30 @@ connectors:
       CONNECTOR_DURATION_PERIOD: "PT24H"
 ```
 
+Per-connector secrets via `envFromSecrets`:
+
+```yaml
+connectors:
+  alienvault:
+    enabled: true
+    image:
+      repository: opencti/connector-alienvault
+    env:
+      CONNECTOR_ID: "my-uuid"
+      CONNECTOR_NAME: "AlienVault OTX"
+    envFromSecrets:
+      ALIENVAULT_API_KEY:
+        name: opencti-secrets
+        key: alienvault-api-key
+```
+
 ### Connector Presets
 
 Pre-built connector bundles in `connector-presets/`:
 
 | Preset | Connectors | API Keys? |
 |--------|-----------|-----------|
-| `free-threat-intel.yaml` | CISA KEV, CVE, MITRE, EPSS, OpenCTI Datasets, URLhaus, ThreatFox, SSL Blacklist, MalwareBazaar, DISARM | ❌ All free |
-
-```bash
-helm install opencti ./charts/opencti \
-  -f values.yaml \
-  -f charts/opencti/connector-presets/free-threat-intel.yaml
-```
+| `free-threat-intel.yaml` | CISA KEV, CVE, MITRE, EPSS, OpenCTI Datasets, URLhaus, ThreatFox, MalwareBazaar, DISARM | ❌ All free |
 
 ### Secrets Management
 
@@ -143,23 +164,36 @@ opencti:
     key: admin-token
 
 # 3. ExternalSecret (recommended for production)
-# See flux/externalsecret.yaml for Infisical example
+# Create an ExternalSecret that produces the K8s Secret referenced above
 ```
 
-## Flux GitOps
+## Flux GitOps (OCI)
 
-See `flux/` for ready-to-use Kustomization with:
-- Namespace
-- ExternalSecrets (Infisical)
-- HelmRelease (add your own)
-
-## dapper-cluster Deployment
-
-```bash
-helm install opencti ./charts/opencti \
-  -n opencti --create-namespace \
-  -f values-dapper-cluster.yaml \
-  -f charts/opencti/connector-presets/free-threat-intel.yaml
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: opencti
+  namespace: flux-system
+spec:
+  type: oci
+  interval: 1h
+  url: oci://ghcr.io/dapperdivers/helm-opencti
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: opencti
+spec:
+  chart:
+    spec:
+      chart: opencti
+      version: "0.1.x"
+      sourceRef:
+        kind: HelmRepository
+        name: opencti
+  values:
+    # your overrides here
 ```
 
 ## Resource Budget
