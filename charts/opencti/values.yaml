@@ -1,0 +1,309 @@
+# ============================================================================
+# helm-opencti — values.yaml
+# Sane defaults with auto-wiring. Override only what you need.
+# ============================================================================
+
+global:
+  imagePullSecrets: []
+
+fullnameOverride: ""
+nameOverride: ""
+
+# -- OpenCTI platform image (shared by server)
+image:
+  repository: opencti/platform
+  pullPolicy: IfNotPresent
+  tag: ""  # defaults to Chart.appVersion
+
+# -- ServiceAccount (shared)
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+  automountServiceAccountToken: false
+
+# ============================================================================
+# OPENCTI CORE CONFIG
+# Single source of truth — auto-propagated to server, workers, connectors
+# ============================================================================
+opencti:
+  adminEmail: admin@opencti.io
+  adminPassword: ""          # REQUIRED — set via --set or existingSecret
+  adminToken: ""             # REQUIRED — UUID, set via --set or existingSecret
+
+  # Use existing K8s secrets instead of plaintext values
+  # adminPasswordExistingSecret:
+  #   name: opencti-credentials
+  #   key: password
+  # adminTokenExistingSecret:
+  #   name: opencti-credentials
+  #   key: token
+
+  basePath: "/"
+  healthAccessKey: ""        # defaults to adminToken if empty
+
+  metrics:
+    enabled: true
+    port: 14269
+
+# ============================================================================
+# READY CHECKER — enabled by default (biggest pain point in devops-ia chart)
+# Waits for all dependencies before starting server/workers/connectors
+# ============================================================================
+readyChecker:
+  enabled: true
+  image: busybox:1.37
+  retries: 60
+  timeout: 5
+
+# ============================================================================
+# SERVER
+# ============================================================================
+server:
+  replicaCount: 1
+  nodeOptions: "--max-old-space-size=8096"
+
+  strategy: {}
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 4000
+    labels: {}
+    annotations: {}
+
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []
+    #   - host: opencti.example.com
+    #     paths:
+    #       - path: /
+    #         pathType: Prefix
+    tls: []
+
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      memory: 8Gi
+
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 180
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    failureThreshold: 30     # 5 minutes total (10s × 30)
+
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  volumes: []
+  volumeMounts: []
+  initContainers: []
+  extraEnv: []
+  envFrom: []
+  terminationGracePeriodSeconds: 30
+
+# ============================================================================
+# WORKER
+# ============================================================================
+worker:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: opencti/worker
+    pullPolicy: IfNotPresent
+    tag: ""  # defaults to Chart.appVersion
+
+  logLevel: info
+
+  strategy: {}
+
+  telemetry:
+    enabled: true
+    port: 14269
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  initContainers: []
+  extraEnv: []
+  terminationGracePeriodSeconds: 30
+
+# ============================================================================
+# EXTERNAL SERVICES — first-class config blocks (not raw env vars!)
+# Set enabled: true + connection details. Auto-wired into all components.
+# ============================================================================
+
+# -- External Elasticsearch/OpenSearch (when opensearch subchart is disabled)
+externalElasticsearch:
+  enabled: false
+  url: ""                     # e.g., http://opensearch.database:9200
+  username: ""
+  password: ""
+
+# -- External Redis / Dragonfly / Valkey
+# No built-in Redis subchart — external is the default pattern
+externalRedis:
+  enabled: true
+  hostname: ""                # REQUIRED — e.g., dragonfly.database.svc.cluster.local
+  port: 6379
+  mode: single                # single | sentinel | cluster
+  password: ""
+
+# -- External RabbitMQ (when rabbitmq subchart is disabled)
+externalRabbitmq:
+  enabled: false
+  hostname: ""
+  port: 5672
+  managementPort: 15672
+  username: user
+  password: ""
+
+# -- External S3/MinIO (when minio subchart is disabled)
+externalS3:
+  enabled: false
+  endpoint: ""                # e.g., minio.storage:9000
+  accessKey: ""
+  secretKey: ""
+  bucketName: opencti-bucket
+  region: ""
+  useSSL: false
+
+# ============================================================================
+# SUBCHARTS — toggle with enabled: true/false
+# When disabled, use the corresponding external* config above
+# ============================================================================
+
+# -- OpenSearch subchart
+opensearch:
+  enabled: true
+  replicas: 1
+  opensearchJavaOpts: "-Xms4g -Xmx4g"
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      memory: 6Gi
+  persistence:
+    enabled: true
+    size: 100Gi
+    # storageClass: ""
+  sysctlInit:
+    enabled: true            # sets vm.max_map_count
+  securityConfig:
+    enabled: false           # disable security for internal-only access
+  config:
+    opensearch.yml: |
+      cluster.name: opencti
+      network.host: 0.0.0.0
+      plugins.security.disabled: true
+
+# -- RabbitMQ subchart (Bitnami)
+rabbitmq:
+  enabled: true
+  auth:
+    username: user
+    # password: set via --set rabbitmq.auth.password=XXX
+  persistence:
+    enabled: true
+    size: 10Gi
+  # OpenCTI requires these RabbitMQ settings
+  extraConfiguration: |
+    consumer_timeout = 86400000
+    max_message_size = 536870912
+
+# -- MinIO subchart
+minio:
+  enabled: true
+  mode: standalone
+  rootUser: minioadmin
+  rootPassword: minioadmin    # Override in production!
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# ============================================================================
+# CONNECTORS
+# Map of connector-name → config. Auto-wired with OPENCTI_URL + OPENCTI_TOKEN.
+# You only need to set connector-specific env vars.
+# ============================================================================
+connectors: {}
+  # Example: CISA Known Exploited Vulnerabilities (free, no API key)
+  # cisa-known-exploited-vulnerabilities:
+  #   enabled: true
+  #   image:
+  #     repository: opencti/connector-cisa-known-exploited-vulnerabilities
+  #     tag: ""   # defaults to appVersion
+  #   env:
+  #     CONNECTOR_ID: "changeme-uuid"
+  #     CONNECTOR_NAME: "CISA KEV"
+  #     CONNECTOR_SCOPE: "cisa"
+  #     CONNECTOR_LOG_LEVEL: "info"
+  #     CONNECTOR_DURATION_PERIOD: "PT24H"
+  #   resources:
+  #     requests:
+  #       cpu: 100m
+  #       memory: 256Mi
+  #     limits:
+  #       memory: 512Mi
+
+  # Example: CVE (NVD database, free)
+  # cve:
+  #   enabled: true
+  #   image:
+  #     repository: opencti/connector-cve
+  #   env:
+  #     CONNECTOR_ID: "changeme-uuid"
+  #     CONNECTOR_NAME: "CVE"
+  #     CONNECTOR_SCOPE: "identity,vulnerability"
+  #     CONNECTOR_LOG_LEVEL: "info"
+  #     CVE_INTERVAL: "24"
+
+  # Example: MITRE ATT&CK (free)
+  # mitre:
+  #   enabled: true
+  #   image:
+  #     repository: opencti/connector-mitre
+  #   env:
+  #     CONNECTOR_ID: "changeme-uuid"
+  #     CONNECTOR_NAME: "MITRE ATT&CK"
+  #     CONNECTOR_SCOPE: "tool,report,malware,identity,campaign,intrusion-set,attack-pattern,course-of-action,x-mitre-data-source,x-mitre-data-component,x-mitre-matrix,x-mitre-tactic,x-mitre-collection"
+  #     MITRE_INTERVAL: "7"

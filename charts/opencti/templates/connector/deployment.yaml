@@ -1,0 +1,91 @@
+{{- range $name, $connector := .Values.connectors }}
+{{- if $connector.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opencti.fullname" $ }}-connector-{{ $name }}
+  labels:
+    {{- include "opencti.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: connector
+    opencti.connector: {{ $name }}
+spec:
+  replicas: {{ $connector.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "opencti.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: connector
+      opencti.connector: {{ $name }}
+  template:
+    metadata:
+      {{- with $connector.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "opencti.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: connector
+        opencti.connector: {{ $name }}
+        {{- with $connector.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with $.Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $connector.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $.Values.readyChecker.enabled }}
+      initContainers:
+        {{- include "opencti.readyChecker" (dict "name" "server" "host" (printf "%s-server" (include "opencti.fullname" $)) "port" ($.Values.server.service.port | default 80) "retries" $.Values.readyChecker.retries "timeout" $.Values.readyChecker.timeout "image" $.Values.readyChecker.image) | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: connector
+          {{- with $connector.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ if $connector.image }}{{ $connector.image.repository | default (printf "opencti/connector-%s" $name) }}:{{ $connector.image.tag | default $.Chart.AppVersion }}{{ else }}opencti/connector-{{ $name }}:{{ $.Chart.AppVersion }}{{ end }}"
+          imagePullPolicy: {{ if $connector.image }}{{ $connector.image.pullPolicy | default "IfNotPresent" }}{{ else }}IfNotPresent{{ end }}
+          env:
+            {{- /* Auto-wired: OPENCTI_URL + OPENCTI_TOKEN */}}
+            {{- include "opencti.connectorEnv" (dict "root" $) | nindent 12 }}
+            {{- /* Connector-specific env vars */}}
+            {{- range $key, $value := $connector.env }}
+            - name: {{ $key | upper }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- with $connector.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $connector.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $connector.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      terminationGracePeriodSeconds: {{ $connector.terminationGracePeriodSeconds | default 30 }}
+      {{- with $connector.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $connector.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $connector.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $connector.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

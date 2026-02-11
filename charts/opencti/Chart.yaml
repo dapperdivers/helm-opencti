@@ -1,0 +1,33 @@
+apiVersion: v2
+name: opencti
+description: |
+  OpenCTI Helm chart with auto-wiring, external service support, and sane defaults.
+  Built on lessons learned from devops-ia/helm-opencti.
+type: application
+version: 0.1.0
+appVersion: 6.4.12
+home: https://github.com/dapperdivers/helm-opencti
+maintainers:
+  - name: Derek Mackley
+    url: https://github.com/dapperdivers
+sources:
+  - https://github.com/OpenCTI-Platform/opencti
+keywords:
+  - opencti
+  - cybersecurity
+  - threat-intelligence
+  - stix
+  - cti
+dependencies:
+  - name: opensearch
+    version: 2.28.0
+    repository: https://opensearch-project.github.io/helm-charts/
+    condition: opensearch.enabled
+  - name: rabbitmq
+    version: 16.0.13
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: rabbitmq.enabled
+  - name: minio
+    version: 5.4.0
+    repository: https://charts.min.io/
+    condition: minio.enabled

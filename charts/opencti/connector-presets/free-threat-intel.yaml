@@ -1,0 +1,198 @@
+# ============================================================================
+# Free Threat Intelligence Connector Pack
+# No API keys required. Just merge this into your values.
+#
+# Usage:
+#   helm install opencti ./charts/opencti \
+#     -f values.yaml \
+#     -f charts/opencti/connector-presets/free-threat-intel.yaml
+# ============================================================================
+
+connectors:
+  # -- CISA Known Exploited Vulnerabilities (daily)
+  cisa-known-exploited-vulnerabilities:
+    enabled: true
+    image:
+      repository: opencti/connector-cisa-known-exploited-vulnerabilities
+    env:
+      CONNECTOR_ID: "a1b2c3d4-0001-4000-8000-000000000001"
+      CONNECTOR_NAME: "CISA KEV"
+      CONNECTOR_SCOPE: "cisa"
+      CONNECTOR_LOG_LEVEL: "info"
+      CONNECTOR_DURATION_PERIOD: "PT24H"
+      CONNECTOR_CONFIDENCE_LEVEL: "100"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+
+  # -- CVE / NVD (daily)
+  cve:
+    enabled: true
+    image:
+      repository: opencti/connector-cve
+    env:
+      CONNECTOR_ID: "a1b2c3d4-0002-4000-8000-000000000002"
+      CONNECTOR_NAME: "CVE (NVD)"
+      CONNECTOR_SCOPE: "identity,vulnerability"
+      CONNECTOR_LOG_LEVEL: "info"
+      CVE_INTERVAL: "24"
+      CVE_BASE_URL: "https://services.nvd.nist.gov/rest/json/cves"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+
+  # -- MITRE ATT&CK (weekly)
+  mitre:
+    enabled: true
+    image:
+      repository: opencti/connector-mitre
+    env:
+      CONNECTOR_ID: "a1b2c3d4-0003-4000-8000-000000000003"
+      CONNECTOR_NAME: "MITRE ATT&CK"
+      CONNECTOR_SCOPE: "tool,report,malware,identity,campaign,intrusion-set,attack-pattern,course-of-action,x-mitre-data-source,x-mitre-data-component,x-mitre-matrix,x-mitre-tactic,x-mitre-collection"
+      CONNECTOR_LOG_LEVEL: "info"
+      MITRE_INTERVAL: "7"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+
+  # -- FIRST EPSS Bulk (daily — exploit probability scores)
+  first-epss:
+    enabled: true
+    image:
+      repository: opencti/connector-first-epss-bulk
+    env:
+      CONNECTOR_ID: "a1b2c3d4-0004-4000-8000-000000000004"
+      CONNECTOR_NAME: "FIRST EPSS"
+      CONNECTOR_SCOPE: "first-epss"
+      CONNECTOR_LOG_LEVEL: "info"
+      CONNECTOR_DURATION_PERIOD: "PT24H"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+
+  # -- OpenCTI Datasets (initial import, then weekly)
+  opencti-datasets:
+    enabled: true
+    image:
+      repository: opencti/connector-opencti
+    env:
+      CONNECTOR_ID: "a1b2c3d4-0005-4000-8000-000000000005"
+      CONNECTOR_NAME: "OpenCTI Datasets"
+      CONNECTOR_SCOPE: "marking-definition,identity,location"
+      CONNECTOR_LOG_LEVEL: "info"
+      CONFIG_INTERVAL: "7"
+      CONFIG_REMOVE_CREATOR: "false"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+
+  # -- Abuse.ch URLhaus (every 6 hours)
+  urlhaus:
+    enabled: true
+    image:
+      repository: opencti/connector-urlhaus
+    env:
+      CONNECTOR_ID: "a1b2c3d4-0006-4000-8000-000000000006"
+      CONNECTOR_NAME: "URLhaus"
+      CONNECTOR_SCOPE: "urlhaus"
+      CONNECTOR_LOG_LEVEL: "info"
+      URLHAUS_CSV_URL: "https://urlhaus.abuse.ch/downloads/csv_recent/"
+      URLHAUS_IMPORT_OFFLINE: "true"
+      CONNECTOR_DURATION_PERIOD: "PT6H"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+
+  # -- Abuse.ch ThreatFox (every 6 hours)
+  threatfox:
+    enabled: true
+    image:
+      repository: opencti/connector-threatfox
+    env:
+      CONNECTOR_ID: "a1b2c3d4-0007-4000-8000-000000000007"
+      CONNECTOR_NAME: "ThreatFox"
+      CONNECTOR_SCOPE: "threatfox"
+      CONNECTOR_LOG_LEVEL: "info"
+      THREATFOX_CSV_URL: "https://threatfox.abuse.ch/export/csv/recent/"
+      THREATFOX_IMPORT_OFFLINE: "true"
+      CONNECTOR_DURATION_PERIOD: "PT6H"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+
+  # -- Abuse.ch SSL Blacklist (every 6 hours)
+  abuse-ssl:
+    enabled: true
+    image:
+      repository: opencti/connector-abuse-ssl
+    env:
+      CONNECTOR_ID: "a1b2c3d4-0008-4000-8000-000000000008"
+      CONNECTOR_NAME: "Abuse.ch SSL"
+      CONNECTOR_SCOPE: "abusessl"
+      CONNECTOR_LOG_LEVEL: "info"
+      ABUSESSL_URL: "https://sslbl.abuse.ch/blacklist/sslblacklist.csv"
+      CONNECTOR_DURATION_PERIOD: "PT6H"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+
+  # -- Abuse.ch MalwareBazaar Recent (every 6 hours)
+  malwarebazaar-recent:
+    enabled: true
+    image:
+      repository: opencti/connector-malwarebazaar-recent-additions
+    env:
+      CONNECTOR_ID: "a1b2c3d4-0009-4000-8000-000000000009"
+      CONNECTOR_NAME: "MalwareBazaar Recent"
+      CONNECTOR_SCOPE: "malwarebazaar"
+      CONNECTOR_LOG_LEVEL: "info"
+      CONNECTOR_DURATION_PERIOD: "PT6H"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+
+  # -- DISARM Framework (weekly)
+  disarm-framework:
+    enabled: true
+    image:
+      repository: opencti/connector-disarm-framework
+    env:
+      CONNECTOR_ID: "a1b2c3d4-0010-4000-8000-000000000010"
+      CONNECTOR_NAME: "DISARM Framework"
+      CONNECTOR_SCOPE: "marking-definition,identity,attack-pattern,course-of-action,intrusion-set,campaign,malware,tool,report,narrative,event,channel"
+      CONNECTOR_LOG_LEVEL: "info"
+      DISARM_FRAMEWORK_INTERVAL: "7"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi

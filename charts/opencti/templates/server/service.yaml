@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opencti.fullname" . }}-server
+  labels:
+    {{- include "opencti.serverLabels" . | nindent 4 }}
+    {{- with .Values.server.service.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.server.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.server.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.server.service.port | default 80 }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    {{- if .Values.opencti.metrics.enabled }}
+    - port: {{ .Values.opencti.metrics.port | default 14269 }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+    {{- end }}
+  selector:
+    {{- include "opencti.serverSelectorLabels" . | nindent 4 }}
