@@ -1,0 +1,16 @@
+{{- if and .Values.rabbitmq.enabled (not .Values.externalRabbitmq.enabled) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "opencti.fullname" . }}-rabbitmq
+  labels:
+    {{- include "opencti.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rabbitmq
+data:
+  opencti.conf: |
+    # OpenCTI requires large consumer timeouts and message sizes
+    consumer_timeout = {{ .Values.rabbitmq.consumerTimeout | default 86400000 | int64 }}
+    max_message_size = {{ .Values.rabbitmq.maxMessageSize | default 536870912 | int64 }}
+    # Management plugin
+    management.listener.port = 15672
+{{- end }}

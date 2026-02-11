@@ -232,26 +232,34 @@ opensearch:
       network.host: 0.0.0.0
       plugins.security.disabled: true
 
-# -- RabbitMQ subchart (Bitnami)
+# -- RabbitMQ (built-in, uses official image — no Bitnami dependency)
 rabbitmq:
   enabled: true
   image:
-    registry: docker.io
-    repository: bitnami/rabbitmq
-    # NOTE: Bitnami removed images from docker.io in Aug 2025.
-    # If image pull fails, override to bitnamilegacy/rabbitmq or use
-    # the official rabbitmq image with appropriate config.
-    # tag: ""  # uses chart appVersion default
+    repository: rabbitmq
+    tag: 4.1-management-alpine
+    pullPolicy: IfNotPresent
   auth:
     username: user
-    # password: set via --set rabbitmq.auth.password=XXX
+    password: ""              # REQUIRED — set via --set or existingSecret
+    # existingSecret:
+    #   name: rabbitmq-credentials
+    #   key: rabbitmq-password
+  # OpenCTI-specific settings
+  consumerTimeout: 86400000     # 24h — OpenCTI connectors need long timeouts
+  maxMessageSize: 536870912     # 512MB — STIX bundles can be large
   persistence:
     enabled: true
     size: 10Gi
-  # OpenCTI requires these RabbitMQ settings
-  extraConfiguration: |
-    consumer_timeout = 86400000
-    max_message_size = 536870912
+    # storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+  nodeSelector: {}
+  tolerations: []
 
 # -- MinIO subchart
 minio:

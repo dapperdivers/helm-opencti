@@ -1,0 +1,23 @@
+{{- if and .Values.rabbitmq.enabled (not .Values.externalRabbitmq.enabled) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opencti.fullname" . }}-rabbitmq
+  labels:
+    {{- include "opencti.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rabbitmq
+spec:
+  type: ClusterIP
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+      protocol: TCP
+    - name: management
+      port: 15672
+      targetPort: management
+      protocol: TCP
+  selector:
+    {{- include "opencti.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: rabbitmq
+{{- end }}

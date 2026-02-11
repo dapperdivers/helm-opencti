@@ -4,7 +4,7 @@ description: |
   OpenCTI Helm chart with auto-wiring, external service support, and sane defaults.
   Built on lessons learned from devops-ia/helm-opencti.
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: 6.4.12
 home: https://github.com/dapperdivers/helm-opencti
 maintainers:
@@ -23,10 +23,6 @@ dependencies:
     version: 2.28.0
     repository: https://opensearch-project.github.io/helm-charts/
     condition: opensearch.enabled
-  - name: rabbitmq
-    version: 16.0.14
-    repository: oci://registry-1.docker.io/bitnamicharts
-    condition: rabbitmq.enabled
   - name: minio
     version: 5.4.0
     repository: https://charts.min.io/
