@@ -272,10 +272,14 @@ Build the auto-wired environment variables for the server
   value: {{ .Values.externalRabbitmq.password | quote }}
 {{- else if .Values.rabbitmq.enabled }}
 - name: RABBITMQ__PASSWORD
+  {{- if .Values.rabbitmq.auth.existingSecret }}
   valueFrom:
     secretKeyRef:
-      name: {{ include "opencti.fullname" . }}-rabbitmq
-      key: rabbitmq-password
+      name: {{ .Values.rabbitmq.auth.existingSecret.name }}
+      key: {{ .Values.rabbitmq.auth.existingSecret.key | default "rabbitmq-password" }}
+  {{- else }}
+  value: {{ .Values.rabbitmq.auth.password | quote }}
+  {{- end }}
 {{- end }}
 # -- Auto-wired: MinIO/S3
 - name: MINIO__ENDPOINT
