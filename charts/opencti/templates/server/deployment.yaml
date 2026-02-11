@@ -39,7 +39,7 @@ spec:
         {{- /* Auto-wired readyCheckers — always enabled by default */}}
         {{- if .Values.readyChecker.enabled }}
         {{- if .Values.opensearch.enabled }}
-        {{- include "opencti.readyChecker" (dict "name" "opensearch" "host" (printf "%s-opensearch" (include "opencti.fullname" .)) "port" 9200 "retries" .Values.readyChecker.retries "timeout" .Values.readyChecker.timeout "image" .Values.readyChecker.image) | nindent 8 }}
+        {{- include "opencti.readyChecker" (dict "name" "opensearch" "host" (.Values.opensearch.fullnameOverride | default "opensearch-cluster-master") "port" 9200 "retries" .Values.readyChecker.retries "timeout" .Values.readyChecker.timeout "image" .Values.readyChecker.image) | nindent 8 }}
         {{- else if .Values.externalElasticsearch.enabled }}
         {{- $esUrl := urlParse .Values.externalElasticsearch.url }}
         {{- include "opencti.readyChecker" (dict "name" "elasticsearch" "host" $esUrl.host "port" ($esUrl.port | default 9200) "retries" .Values.readyChecker.retries "timeout" .Values.readyChecker.timeout "image" .Values.readyChecker.image) | nindent 8 }}

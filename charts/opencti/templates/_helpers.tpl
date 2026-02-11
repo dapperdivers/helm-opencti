@@ -88,7 +88,7 @@ Elasticsearch/OpenSearch URL — auto-wired from subchart or external config
 {{- if .Values.externalElasticsearch.enabled -}}
   {{- .Values.externalElasticsearch.url -}}
 {{- else if .Values.opensearch.enabled -}}
-  http://{{ include "opencti.fullname" . }}-opensearch:9200
+  http://{{ .Values.opensearch.fullnameOverride | default "opensearch-cluster-master" }}:9200
 {{- else -}}
   {{- fail "Either opensearch.enabled or externalElasticsearch.enabled must be true" -}}
 {{- end -}}
