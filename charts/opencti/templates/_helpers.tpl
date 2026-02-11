@@ -165,7 +165,7 @@ MinIO/S3 — auto-wired from subchart or external config
 {{- if .Values.externalS3.enabled -}}
   {{- .Values.externalS3.endpoint -}}
 {{- else if .Values.minio.enabled -}}
-  {{- printf "http://%s-minio:9000" (include "opencti.fullname" .) -}}
+  {{- printf "%s-minio" (include "opencti.fullname" .) -}}
 {{- else -}}
   {{- fail "Either minio.enabled or externalS3.enabled must be true" -}}
 {{- end -}}
@@ -284,6 +284,12 @@ Build the auto-wired environment variables for the server
 # -- Auto-wired: MinIO/S3
 - name: MINIO__ENDPOINT
   value: {{ include "opencti.minioEndpoint" . | trim | quote }}
+- name: MINIO__PORT
+  {{- if and .Values.externalS3.enabled .Values.externalS3.port }}
+  value: {{ .Values.externalS3.port | quote }}
+  {{- else }}
+  value: "9000"
+  {{- end }}
 {{- if or .Values.externalS3.accessKey .Values.minio.enabled }}
 - name: MINIO__ACCESS_KEY
   {{- if .Values.externalS3.enabled }}
