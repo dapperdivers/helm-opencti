@@ -1,0 +1,27 @@
+🛡️ OpenCTI {{ .Chart.AppVersion }} has been deployed!
+
+{{- if .Values.server.ingress.enabled }}
+Access the platform at:
+{{- range .Values.server.ingress.hosts }}
+  https://{{ .host }}
+{{- end }}
+{{- else }}
+Access the platform via port-forward:
+  kubectl port-forward svc/{{ include "opencti.fullname" . }}-server {{ .Values.server.service.port }}:{{ .Values.server.service.port }} -n {{ .Release.Namespace }}
+  Then visit: http://localhost:{{ .Values.server.service.port }}
+{{- end }}
+
+GraphQL API: http://{{ include "opencti.fullname" . }}-server.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.server.service.port }}/graphql
+
+{{- if .Values.opencti.adminTokenExistingSecret }}
+Admin token: stored in Secret "{{ .Values.opencti.adminTokenExistingSecret.name }}"
+{{- end }}
+
+Components:
+  ✅ Server: {{ .Values.server.replicaCount | default 1 }} replica(s)
+  ✅ Workers: {{ .Values.worker.replicaCount | default 3 }} replica(s)
+  ✅ Connectors: {{ len .Values.connectors }} configured
+  ✅ OpenSearch: {{ if .Values.opensearch.enabled }}subchart{{ else }}external{{ end }}
+  ✅ RabbitMQ: {{ if .Values.rabbitmq.enabled }}native (built-in){{ else }}external{{ end }}
+  ✅ MinIO: {{ if .Values.minio.enabled }}subchart{{ else }}external S3{{ end }}
+  ✅ Redis: {{ if .Values.externalRedis.enabled }}external{{ else }}not configured{{ end }}

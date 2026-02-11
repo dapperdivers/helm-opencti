@@ -1,22 +1,31 @@
-# ============================================================================
-# Free Threat Intelligence Connector Pack
-# No API keys required. Just merge this into your values.
+# =============================================================================
+# Free Threat Intelligence Connector Bundle
+# =============================================================================
+# All connectors below are FREE and require no API keys (except AlienVault OTX
+# which requires a free account, and Malware Bazaar which is disabled by default).
 #
 # Usage:
-#   helm install opencti ./charts/opencti \
-#     -f values.yaml \
-#     -f charts/opencti/connector-presets/free-threat-intel.yaml
-# ============================================================================
+#   helm install opencti oci://ghcr.io/dapperdivers/helm-opencti/opencti \
+#     -f free-threat-intel.yaml \
+#     --set opencti.adminPassword=changeme \
+#     --set opencti.adminToken=$(uuidgen) \
+#     --set rabbitmq.auth.password=changeme \
+#     --set externalRedis.hostname=your-redis-host
+#
+# Generate fresh UUIDs: for i in $(seq 8); do uuidgen; done
+# =============================================================================
 
 connectors:
-  # -- CISA Known Exploited Vulnerabilities (daily)
+
+  # ---------------------------------------------------------------------------
+  # CISA Known Exploited Vulnerabilities (KEV)
+  # https://www.cisa.gov/known-exploited-vulnerabilities-catalog
+  # ---------------------------------------------------------------------------
   cisa-known-exploited-vulnerabilities:
     enabled: true
-    image:
-      repository: opencti/connector-cisa-known-exploited-vulnerabilities
     env:
-      CONNECTOR_ID: "a1b2c3d4-0001-4000-8000-000000000001"
-      CONNECTOR_NAME: "CISA KEV"
+      CONNECTOR_ID: "a1e3c5b7-9f2d-4a8b-b6c1-d3e5f7a9b1c3"
+      CONNECTOR_NAME: "CISA Known Exploited Vulnerabilities"
       CONNECTOR_SCOPE: "cisa"
       CONNECTOR_LOG_LEVEL: "info"
       CONNECTOR_DURATION_PERIOD: "PT24H"
@@ -28,54 +37,71 @@ connectors:
       limits:
         memory: 512Mi
 
-  # -- CVE / NVD (daily)
+  # ---------------------------------------------------------------------------
+  # MITRE ATT&CK Framework
+  # https://attack.mitre.org/
+  # ---------------------------------------------------------------------------
+  mitre:
+    enabled: true
+    env:
+      CONNECTOR_ID: "b2f4d6e8-0a3c-5b9d-c7e2-f4a6b8c0d2e4"
+      CONNECTOR_NAME: "MITRE ATT&CK"
+      CONNECTOR_SCOPE: "tool,report,malware,identity,campaign,intrusion-set,attack-pattern,course-of-action,x-mitre-data-source,x-mitre-data-component,x-mitre-matrix,x-mitre-tactic,x-mitre-collection"
+      CONNECTOR_LOG_LEVEL: "info"
+      CONNECTOR_RUN_AND_TERMINATE: "false"
+      CONNECTOR_DURATION_PERIOD: "P7D"
+      CONNECTOR_CONFIDENCE_LEVEL: "100"
+      MITRE_INTERVAL: "7"            # days
+      MITRE_ENTERPRISE_FILE_URL: "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json"
+      MITRE_MOBILE_ATTACK_FILE_URL: "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/mobile-attack/mobile-attack.json"
+      MITRE_ICS_ATTACK_FILE_URL: "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/ics-attack/ics-attack.json"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+  # ---------------------------------------------------------------------------
+  # CVE (NVD — National Vulnerability Database)
+  # https://nvd.nist.gov/
+  # ---------------------------------------------------------------------------
   cve:
     enabled: true
-    image:
-      repository: opencti/connector-cve
     env:
-      CONNECTOR_ID: "a1b2c3d4-0002-4000-8000-000000000002"
-      CONNECTOR_NAME: "CVE (NVD)"
+      CONNECTOR_ID: "c3a5e7f9-1b4d-6c0e-d8f3-a5b7c9d1e3f5"
+      CONNECTOR_NAME: "Common Vulnerabilities and Exposures"
       CONNECTOR_SCOPE: "identity,vulnerability"
       CONNECTOR_LOG_LEVEL: "info"
-      CVE_INTERVAL: "24"
+      CONNECTOR_CONFIDENCE_LEVEL: "100"
+      CONNECTOR_RUN_AND_TERMINATE: "false"
+      CONNECTOR_DURATION_PERIOD: "PT24H"
+      CVE_INTERVAL: "24"             # hours
       CVE_BASE_URL: "https://services.nvd.nist.gov/rest/json/cves"
     resources:
       requests:
         cpu: 100m
         memory: 256Mi
       limits:
-        memory: 1Gi
-
-  # -- MITRE ATT&CK (weekly)
-  mitre:
-    enabled: true
-    image:
-      repository: opencti/connector-mitre
-    env:
-      CONNECTOR_ID: "a1b2c3d4-0003-4000-8000-000000000003"
-      CONNECTOR_NAME: "MITRE ATT&CK"
-      CONNECTOR_SCOPE: "tool,report,malware,identity,campaign,intrusion-set,attack-pattern,course-of-action,x-mitre-data-source,x-mitre-data-component,x-mitre-matrix,x-mitre-tactic,x-mitre-collection"
-      CONNECTOR_LOG_LEVEL: "info"
-      MITRE_INTERVAL: "7"
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-      limits:
         memory: 512Mi
 
-  # -- FIRST EPSS Bulk (daily — exploit probability scores)
-  first-epss:
+  # ---------------------------------------------------------------------------
+  # EPSS (Exploit Prediction Scoring System)
+  # https://www.first.org/epss/
+  # ---------------------------------------------------------------------------
+  epss:
     enabled: true
     image:
-      repository: opencti/connector-first-epss-bulk
+      repository: opencti/connector-epss
     env:
-      CONNECTOR_ID: "a1b2c3d4-0004-4000-8000-000000000004"
-      CONNECTOR_NAME: "FIRST EPSS"
-      CONNECTOR_SCOPE: "first-epss"
+      CONNECTOR_ID: "d4b6f8a0-2c5e-7d1f-e9a4-b6c8d0e2f4a6"
+      CONNECTOR_NAME: "EPSS"
+      CONNECTOR_SCOPE: "vulnerability"
       CONNECTOR_LOG_LEVEL: "info"
+      CONNECTOR_CONFIDENCE_LEVEL: "100"
+      CONNECTOR_RUN_AND_TERMINATE: "false"
       CONNECTOR_DURATION_PERIOD: "PT24H"
+      EPSS_API_URL: "https://api.first.org/data/v1/epss"
     resources:
       requests:
         cpu: 100m
@@ -83,58 +109,25 @@ connectors:
       limits:
         memory: 512Mi
 
-  # -- OpenCTI Datasets (initial import, then weekly)
-  opencti-datasets:
-    enabled: true
-    image:
-      repository: opencti/connector-opencti
-    env:
-      CONNECTOR_ID: "a1b2c3d4-0005-4000-8000-000000000005"
-      CONNECTOR_NAME: "OpenCTI Datasets"
-      CONNECTOR_SCOPE: "marking-definition,identity,location"
-      CONNECTOR_LOG_LEVEL: "info"
-      CONFIG_INTERVAL: "7"
-      CONFIG_REMOVE_CREATOR: "false"
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-      limits:
-        memory: 512Mi
-
-  # -- Abuse.ch URLhaus (every 6 hours)
-  urlhaus:
-    enabled: true
-    image:
-      repository: opencti/connector-urlhaus
-    env:
-      CONNECTOR_ID: "a1b2c3d4-0006-4000-8000-000000000006"
-      CONNECTOR_NAME: "URLhaus"
-      CONNECTOR_SCOPE: "urlhaus"
-      CONNECTOR_LOG_LEVEL: "info"
-      URLHAUS_CSV_URL: "https://urlhaus.abuse.ch/downloads/csv_recent/"
-      URLHAUS_IMPORT_OFFLINE: "true"
-      CONNECTOR_DURATION_PERIOD: "PT6H"
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-      limits:
-        memory: 512Mi
-
-  # -- Abuse.ch ThreatFox (every 6 hours)
+  # ---------------------------------------------------------------------------
+  # abuse.ch ThreatFox
+  # https://threatfox.abuse.ch/
+  # ---------------------------------------------------------------------------
   threatfox:
     enabled: true
     image:
       repository: opencti/connector-threatfox
     env:
-      CONNECTOR_ID: "a1b2c3d4-0007-4000-8000-000000000007"
-      CONNECTOR_NAME: "ThreatFox"
+      CONNECTOR_ID: "e5c7a9b1-3d6f-8e2a-f0b5-c7d9e1f3a5b7"
+      CONNECTOR_NAME: "Abuse.ch ThreatFox"
       CONNECTOR_SCOPE: "threatfox"
       CONNECTOR_LOG_LEVEL: "info"
-      THREATFOX_CSV_URL: "https://threatfox.abuse.ch/export/csv/recent/"
+      CONNECTOR_CONFIDENCE_LEVEL: "60"
+      CONNECTOR_RUN_AND_TERMINATE: "false"
+      CONNECTOR_DURATION_PERIOD: "PT24H"
+      THREATFOX_CSV_URL: "https://threatfox.abuse.ch/export/csv/full/"
       THREATFOX_IMPORT_OFFLINE: "true"
-      CONNECTOR_DURATION_PERIOD: "PT6H"
+      THREATFOX_INTERVAL: "3"        # days
     resources:
       requests:
         cpu: 100m
@@ -142,18 +135,25 @@ connectors:
       limits:
         memory: 512Mi
 
-  # -- Abuse.ch SSL Blacklist (every 6 hours)
-  abuse-ssl:
+  # ---------------------------------------------------------------------------
+  # abuse.ch URLhaus
+  # https://urlhaus.abuse.ch/
+  # ---------------------------------------------------------------------------
+  urlhaus:
     enabled: true
     image:
-      repository: opencti/connector-abuse-ssl
+      repository: opencti/connector-urlhaus
     env:
-      CONNECTOR_ID: "a1b2c3d4-0008-4000-8000-000000000008"
-      CONNECTOR_NAME: "Abuse.ch SSL"
-      CONNECTOR_SCOPE: "abusessl"
+      CONNECTOR_ID: "f6d8b0c2-4e7a-9f3b-a1c6-d8e0f2a4b6c8"
+      CONNECTOR_NAME: "Abuse.ch URLhaus"
+      CONNECTOR_SCOPE: "urlhaus"
       CONNECTOR_LOG_LEVEL: "info"
-      ABUSESSL_URL: "https://sslbl.abuse.ch/blacklist/sslblacklist.csv"
-      CONNECTOR_DURATION_PERIOD: "PT6H"
+      CONNECTOR_CONFIDENCE_LEVEL: "50"
+      CONNECTOR_RUN_AND_TERMINATE: "false"
+      CONNECTOR_DURATION_PERIOD: "PT24H"
+      URLHAUS_CSV_URL: "https://urlhaus.abuse.ch/downloads/csv_recent/"
+      URLHAUS_IMPORT_OFFLINE: "true"
+      URLHAUS_INTERVAL: "3"          # days
     resources:
       requests:
         cpu: 100m
@@ -161,35 +161,54 @@ connectors:
       limits:
         memory: 512Mi
 
-  # -- Abuse.ch MalwareBazaar Recent (every 6 hours)
-  malwarebazaar-recent:
+  # ---------------------------------------------------------------------------
+  # AlienVault OTX — ⚠️ Requires FREE API key from https://otx.alienvault.com/
+  # Set via: --set connectors.alienvault.envFromSecrets.ALIENVAULT_API_KEY.name=my-secret
+  # Or just put the key in env below (less secure).
+  # ---------------------------------------------------------------------------
+  alienvault:
     enabled: true
+    image:
+      repository: opencti/connector-alienvault
+    env:
+      CONNECTOR_ID: "a7e9c1d3-5f8b-0a4c-b2d7-e9f1a3b5c7d9"
+      CONNECTOR_NAME: "AlienVault OTX"
+      CONNECTOR_SCOPE: "alienvault"
+      CONNECTOR_LOG_LEVEL: "info"
+      CONNECTOR_CONFIDENCE_LEVEL: "50"
+      CONNECTOR_RUN_AND_TERMINATE: "false"
+      CONNECTOR_DURATION_PERIOD: "PT6H"
+      ALIENVAULT_BASE_URL: "https://otx.alienvault.com"
+      ALIENVAULT_API_KEY: "changeme"         # ⚠️ Replace with your OTX API key!
+      ALIENVAULT_TLP: "White"
+      ALIENVAULT_CREATE_OBSERVABLES: "true"
+      ALIENVAULT_CREATE_INDICATORS: "true"
+      ALIENVAULT_PULSE_START_TIMESTAMP: "2023-01-01T00:00:00"
+      ALIENVAULT_INTERVAL: "360"     # minutes
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+
+  # ---------------------------------------------------------------------------
+  # abuse.ch Malware Bazaar — disabled by default (large data volume)
+  # https://bazaar.abuse.ch/
+  # ---------------------------------------------------------------------------
+  malwarebazaar-recent-additions:
+    enabled: false
     image:
       repository: opencti/connector-malwarebazaar-recent-additions
     env:
-      CONNECTOR_ID: "a1b2c3d4-0009-4000-8000-000000000009"
-      CONNECTOR_NAME: "MalwareBazaar Recent"
+      CONNECTOR_ID: "b8f0d2e4-6a9c-1b5d-c3e8-f0a2b4c6d8e0"
+      CONNECTOR_NAME: "Malware Bazaar Recent Additions"
       CONNECTOR_SCOPE: "malwarebazaar"
       CONNECTOR_LOG_LEVEL: "info"
-      CONNECTOR_DURATION_PERIOD: "PT6H"
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-      limits:
-        memory: 512Mi
-
-  # -- DISARM Framework (weekly)
-  disarm-framework:
-    enabled: true
-    image:
-      repository: opencti/connector-disarm-framework
-    env:
-      CONNECTOR_ID: "a1b2c3d4-0010-4000-8000-000000000010"
-      CONNECTOR_NAME: "DISARM Framework"
-      CONNECTOR_SCOPE: "marking-definition,identity,attack-pattern,course-of-action,intrusion-set,campaign,malware,tool,report,narrative,event,channel"
-      CONNECTOR_LOG_LEVEL: "info"
-      DISARM_FRAMEWORK_INTERVAL: "7"
+      CONNECTOR_CONFIDENCE_LEVEL: "50"
+      CONNECTOR_RUN_AND_TERMINATE: "false"
+      CONNECTOR_DURATION_PERIOD: "PT24H"
+      MALWAREBAZAAR_RECENT_ADDITIONS_API_URL: "https://mb-api.abuse.ch/api/v1/"
     resources:
       requests:
         cpu: 100m

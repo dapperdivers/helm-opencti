@@ -66,9 +66,24 @@ spec:
                   name: {{ $secretRef.name }}
                   key: {{ $secretRef.key }}
             {{- end }}
-          {{- with $connector.envFrom }}
+            {{- /* Global connector env vars */}}
+            {{- range $e := $.Values.connectorsGlobal.extraEnv }}
+            - name: {{ $e.name }}
+              {{- if $e.value }}
+              value: {{ $e.value | quote }}
+              {{- else if $e.valueFrom }}
+              valueFrom:
+                {{- toYaml $e.valueFrom | nindent 16 }}
+              {{- end }}
+            {{- end }}
+          {{- if or $.Values.connectorsGlobal.envFrom $connector.envFrom }}
           envFrom:
+            {{- with $.Values.connectorsGlobal.envFrom }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- with $connector.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           {{- with $connector.resources }}
           resources:

@@ -41,6 +41,8 @@ opencti:
 
   basePath: "/"
   healthAccessKey: ""        # defaults to adminToken if empty
+                              # ⚠️  WARNING: This value appears in plaintext in pod spec (health probe URLs).
+                              # A future release will move to path-based probes to avoid exposure.
 
   metrics:
     enabled: true
@@ -160,6 +162,7 @@ worker:
   affinity: {}
   initContainers: []
   extraEnv: []
+  envFrom: []
   terminationGracePeriodSeconds: 30
 
 # ============================================================================
@@ -196,6 +199,7 @@ externalRabbitmq:
 externalS3:
   enabled: false
   endpoint: ""                # e.g., minio.storage:9000
+  port: 9000                  # -- S3/MinIO port
   accessKey: ""
   secretKey: ""
   bucketName: opencti-bucket
@@ -280,6 +284,13 @@ minio:
 # Map of connector-name → config. Auto-wired with OPENCTI_URL + OPENCTI_TOKEN.
 # You only need to set connector-specific env vars.
 # ============================================================================
+# -- Global connector settings (applied to ALL connectors)
+connectorsGlobal:
+  extraEnv: []
+  envFrom: []
+  #   - secretRef:
+  #       name: opencti-connector-secrets
+
 connectors: {}
   # Example: CISA Known Exploited Vulnerabilities (free, no API key)
   # cisa-known-exploited-vulnerabilities:
