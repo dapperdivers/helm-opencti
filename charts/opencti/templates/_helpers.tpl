@@ -184,9 +184,9 @@ The single source of truth, propagated to workers + connectors automatically.
 */}}
 {{- define "opencti.adminToken" -}}
 {{- if .Values.opencti.adminTokenExistingSecret -}}
-  {{/* Will be injected via envFrom — return empty */}}
+  __FROM_SECRET__
 {{- else -}}
-  {{- required "opencti.adminToken is required" .Values.opencti.adminToken -}}
+  {{- required "opencti.adminToken is required (or set opencti.adminTokenExistingSecret)" .Values.opencti.adminToken -}}
 {{- end -}}
 {{- end }}
 
@@ -194,7 +194,13 @@ The single source of truth, propagated to workers + connectors automatically.
 Health access key
 */}}
 {{- define "opencti.healthAccessKey" -}}
-{{- .Values.opencti.healthAccessKey | default (include "opencti.adminToken" .) -}}
+{{- if .Values.opencti.healthAccessKey -}}
+  {{- .Values.opencti.healthAccessKey -}}
+{{- else if not .Values.opencti.adminTokenExistingSecret -}}
+  {{- include "opencti.adminToken" . -}}
+{{- else -}}
+  {{- fail "opencti.healthAccessKey is required when using adminTokenExistingSecret (token not available at template time)" -}}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -339,7 +345,12 @@ Build the auto-wired environment variables for a connector
 - name: OPENCTI_URL
   value: {{ include "opencti.serverUrl" .root | quote }}
 - name: OPENCTI_TOKEN
-  {{- if .root.Values.opencti.adminTokenExistingSecret }}
+  {{- if .root.Values.opencti.connectorTokenExistingSecret }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .root.Values.opencti.connectorTokenExistingSecret.name }}
+      key: {{ .root.Values.opencti.connectorTokenExistingSecret.key | default "token" }}
+  {{- else if .root.Values.opencti.adminTokenExistingSecret }}
   valueFrom:
     secretKeyRef:
       name: {{ .root.Values.opencti.adminTokenExistingSecret.name }}
