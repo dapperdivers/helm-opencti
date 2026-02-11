@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "description": "OpenCTI connector images — auto-merge patch/minor",
+      "matchDatasources": ["docker"],
+      "matchPackagePatterns": ["^opencti/"],
+      "automerge": true,
+      "automergeType": "pr",
+      "groupName": "OpenCTI images"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["charts/opencti/Chart\\.yaml$"],
+      "matchStrings": ["appVersion: (?<currentValue>[\\d.]+)"],
+      "depNameTemplate": "opencti/platform",
+      "datasourceTemplate": "docker",
+      "extractVersionTemplate": "^(?<version>[\\d.]+)$"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["charts/opencti/connector-presets/.*\\.yaml$"],
+      "matchStrings": ["tag: [\"']?(?<currentValue>[\\d.]+)[\"']?"],
+      "depNameTemplate": "opencti/platform",
+      "datasourceTemplate": "docker"
+    }
+  ]
+}
