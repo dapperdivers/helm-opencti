@@ -4,8 +4,8 @@ description: |
   OpenCTI Helm chart with auto-wiring, external service support, and sane defaults.
   Built on lessons learned from devops-ia/helm-opencti.
 type: application
-version: 0.2.2
-appVersion: 6.4.12
+version: 0.3.0
+appVersion: 6.9.17
 home: https://github.com/dapperdivers/helm-opencti
 maintainers:
   - name: dapperdivers
