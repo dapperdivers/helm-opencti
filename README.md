@@ -1,30 +1,12 @@
 # helm-opencti 🛡️
 
-An opinionated Helm chart for [OpenCTI](https://github.com/OpenCTI-Platform/opencti) — built from scratch after 14 PRs of lessons learned with `devops-ia/helm-opencti`.
+An opinionated Helm chart for [OpenCTI](https://github.com/OpenCTI-Platform/opencti) with auto-wiring, external service support, and native RabbitMQ.
 
-## Why Another Chart?
+Published to OCI: `oci://ghcr.io/dapperdivers/helm-opencti/opencti`
 
-The community `devops-ia/helm-opencti` chart works, but has friction:
-
-| Pain Point | devops-ia | This Chart |
-|---|---|---|
-| **Service URLs** | Hardcoded to `release-name-*` in default env | Auto-wired from subchart state |
-| **Admin token** | Must be duplicated in server + workers + each connector | Single source in `opencti.adminToken`, auto-propagated |
-| **External Redis** | Raw env vars (`REDIS__HOSTNAME`) | First-class `externalRedis:` config block |
-| **External ES** | Raw env vars | First-class `externalElasticsearch:` block |
-| **External RabbitMQ** | Raw env vars | First-class `externalRabbitmq:` block |
-| **External S3** | Raw env vars | First-class `externalS3:` block |
-| **readyChecker** | Disabled by default | **Enabled by default** — dependencies checked before startup |
-| **Connector config** | Each connector needs `OPENCTI_URL` + `OPENCTI_TOKEN` | Auto-injected, you only set connector-specific env |
-| **Connector presets** | Copy-paste examples | Pre-built values files for common connector bundles |
-| **Secrets** | Inline plaintext or manual secret refs | `existingSecret` pattern + ExternalSecret examples |
-| **Health probes** | Basic | Startup probe (5-min grace), liveness, readiness all configured |
-| **Values structure** | Flat `env:` map with 1300 lines | Structured `server:`/`worker:`/`connectors:` hierarchy |
-
-## Quick Start
+## Install
 
 ```bash
-# Install from OCI registry
 helm install opencti oci://ghcr.io/dapperdivers/helm-opencti/opencti \
   -n opencti --create-namespace \
   --set opencti.adminPassword=changeme \
@@ -33,169 +15,56 @@ helm install opencti oci://ghcr.io/dapperdivers/helm-opencti/opencti \
   --set externalRedis.hostname=your-redis-host
 ```
 
-## Flux CD / GitOps
+## Key Design Decisions
 
-### OCI HelmRepository
+**Auto-wired service URLs** — Service hostnames for OpenSearch, RabbitMQ, MinIO, and Redis are resolved from chart state. No hardcoded `release-name-*` defaults to override.
 
-> **Important:** The `type: oci` field is required. Without it, Flux treats the URL as a traditional HTTP chart repository.
+**Single-source admin token** — Set `opencti.adminToken` once. It propagates to server, workers, and all connectors automatically. Optional `connectorTokenExistingSecret` for least-privilege separation.
 
-```yaml
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  name: opencti
-  namespace: flux-system
-spec:
-  type: oci                        # ← Required for OCI registries!
-  interval: 1h
-  url: oci://ghcr.io/dapperdivers/helm-opencti
-```
+**Native RabbitMQ** — No Bitnami subchart dependency. Purpose-built StatefulSet using `rabbitmq:4.1-management-alpine` with OpenCTI-tuned settings (`consumer_timeout=24h`, `max_message_size=512MB`).
 
-### HelmRelease
+**External service blocks** — First-class config for `externalRedis`, `externalElasticsearch`, `externalRabbitmq`, and `externalS3`. Toggle subcharts on/off, point at your existing infrastructure.
 
-```yaml
-apiVersion: helm.toolkit.fluxcd.io/v2
-kind: HelmRelease
-metadata:
-  name: opencti
-  namespace: opencti
-spec:
-  interval: 30m
-  chart:
-    spec:
-      chart: opencti
-      version: "0.4.x"            # semver range — picks latest 0.4.x
-      sourceRef:
-        kind: HelmRepository
-        name: opencti
-        namespace: flux-system
-  values:
-    opencti:
-      adminTokenExistingSecret:
-        name: opencti-credentials
-        key: admin-token
-    externalRedis:
-      enabled: true
-      hostname: dragonfly.database.svc.cluster.local
-    server:
-      ingress:
-        enabled: true
-        className: internal         # Check yours: kubectl get ingressclass
-        hosts:
-          - host: opencti.example.com
-            paths:
-              - path: /
-                pathType: Prefix
-```
+**readyChecker enabled by default** — Init containers verify all dependencies (OpenSearch, RabbitMQ, Redis, MinIO) are reachable before server/workers/connectors start. Eliminates crashloop cascades.
 
-> **⚠️ OCI reconciliation gotcha:** `flux reconcile source helm opencti` does **NOT** work for OCI HelmRepositories. To force an update, use suspend/resume:
-> ```bash
-> flux suspend source helm opencti && flux resume source helm opencti
-> ```
-> Or just rely on the `interval` to pick up new versions automatically.
+**Connector auto-injection** — Connectors only need their specific env vars. `OPENCTI_URL` and `OPENCTI_TOKEN` are injected automatically. Per-connector secrets via `envFromSecrets`. Global connector env via `connectorsGlobal`.
 
-> **💡 Ingress class:** Check your cluster's available ingress class names with `kubectl get ingressclass`. Common values: `nginx`, `internal`, `traefik`, `cilium`.
+**Structured values** — `server:`, `worker:`, `connectors:` hierarchy instead of a flat 1300-line env map.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    OpenCTI Namespace                      │
-│                                                          │
-│  ┌──────────┐    ┌──────────┐    ┌──────────────────┐   │
-│  │  Server   │◄──│ Workers  │    │   Connectors     │   │
-│  │ (GraphQL) │    │  (×3)    │    │ (CISA, CVE, ...) │   │
-│  └────┬──┬──┘    └────┬─────┘    └────────┬─────────┘   │
-│       │  │            │                    │             │
-│       │  └────────────┴────────────────────┘             │
-│       │         OPENCTI_URL + OPENCTI_TOKEN              │
-│       │              (auto-wired)                        │
-│  ┌────┴────┐  ┌──────────┐  ┌───────┐  ┌──────────┐   │
-│  │OpenSearch│  │ RabbitMQ │  │ MinIO │  │  Redis   │   │
-│  │(subchart)│  │(subchart)│  │(sub.) │  │(external)│   │
-│  └─────────┘  └──────────┘  └───────┘  └──────────┘   │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  ┌──────────┐   ┌──────────┐   ┌────────────────┐   │
+│  │  Server   │◄──│ Workers  │   │  Connectors    │   │
+│  │ (GraphQL) │   │  (×N)    │   │ (CISA,CVE,...) │   │
+│  └────┬──┬──┘   └────┬─────┘   └───────┬────────┘   │
+│       │  └────────────┴─────────────────┘            │
+│       │       OPENCTI_URL + OPENCTI_TOKEN            │
+│       │            (auto-wired)                      │
+│  ┌────┴────┐  ┌──────────┐  ┌───────┐  ┌────────┐   │
+│  │OpenSearch│  │ RabbitMQ │  │ MinIO │  │ Redis  │   │
+│  │(subchart)│  │ (native) │  │(sub.) │  │(extern)│   │
+│  └─────────┘  └──────────┘  └───────┘  └────────┘   │
+└──────────────────────────────────────────────────────┘
 ```
 
-## Configuration
-
-### Core Config (Single Source of Truth)
-
-```yaml
-opencti:
-  adminEmail: admin@opencti.io
-  adminPassword: "my-secret-password"
-  adminToken: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-```
-
-These values are automatically propagated to:
-- ✅ Server deployment
-- ✅ All worker pods
-- ✅ Every connector
-
-### Dedicated Connector Token
-
-Use a separate token for connectors (least-privilege):
-
-```yaml
-opencti:
-  adminTokenExistingSecret:
-    name: opencti-secrets
-    key: admin-token
-  connectorTokenExistingSecret:
-    name: opencti-secrets
-    key: connector-token
-```
-
-### External Services
-
-Instead of raw env vars, use structured config blocks:
-
-```yaml
-# External Redis (Dragonfly, Valkey, etc.)
-externalRedis:
-  enabled: true
-  hostname: dragonfly.database.svc.cluster.local
-  port: 6379
-  mode: single
-
-# External Elasticsearch/OpenSearch
-externalElasticsearch:
-  enabled: true
-  url: http://opensearch.database:9200
-
-# Disable the corresponding subchart
-opensearch:
-  enabled: false
-```
-
-### Connectors
-
-Connectors only need their specific config — `OPENCTI_URL` and `OPENCTI_TOKEN` are auto-injected:
+## Connectors
 
 ```yaml
 connectors:
   cisa-known-exploited-vulnerabilities:
     enabled: true
-    image:
-      repository: opencti/connector-cisa-known-exploited-vulnerabilities
     env:
-      CONNECTOR_ID: "my-uuid"
+      CONNECTOR_ID: "uuid"
       CONNECTOR_NAME: "CISA KEV"
       CONNECTOR_SCOPE: "cisa"
       CONNECTOR_DURATION_PERIOD: "PT24H"
-```
 
-Per-connector secrets via `envFromSecrets`:
-
-```yaml
-connectors:
   alienvault:
     enabled: true
-    image:
-      repository: opencti/connector-alienvault
     env:
-      CONNECTOR_ID: "my-uuid"
+      CONNECTOR_ID: "uuid"
       CONNECTOR_NAME: "AlienVault OTX"
     envFromSecrets:
       ALIENVAULT_API_KEY:
@@ -203,34 +72,29 @@ connectors:
         key: alienvault-api-key
 ```
 
-### Connector Presets
+Pre-built bundles in `connector-presets/free-threat-intel.yaml` (CISA KEV, CVE, MITRE, EPSS, URLhaus, ThreatFox, MalwareBazaar, DISARM — all free, no API keys).
 
-Pre-built connector bundles in `connector-presets/`:
-
-| Preset | Connectors | API Keys? |
-|--------|-----------|-----------|
-| `free-threat-intel.yaml` | CISA KEV, CVE, MITRE, EPSS, OpenCTI Datasets, URLhaus, ThreatFox, MalwareBazaar, DISARM | ❌ All free |
-
-### Secrets Management
-
-Three patterns supported:
+## Secrets
 
 ```yaml
-# 1. Inline (dev/testing only)
+# Inline (dev only)
 opencti:
   adminToken: "my-token"
 
-# 2. Existing K8s Secret
+# Existing Secret (recommended)
 opencti:
   adminTokenExistingSecret:
     name: opencti-credentials
     key: admin-token
 
-# 3. ExternalSecret (recommended for production)
-# Create an ExternalSecret that produces the K8s Secret referenced above
+# Separate connector token (least-privilege)
+opencti:
+  connectorTokenExistingSecret:
+    name: opencti-credentials
+    key: connector-token
 ```
 
-## Flux GitOps (OCI)
+## Flux CD (OCI)
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -242,34 +106,21 @@ spec:
   type: oci
   interval: 1h
   url: oci://ghcr.io/dapperdivers/helm-opencti
----
-apiVersion: helm.toolkit.fluxcd.io/v2
-kind: HelmRelease
-metadata:
-  name: opencti
-spec:
-  chart:
-    spec:
-      chart: opencti
-      version: "0.1.x"
-      sourceRef:
-        kind: HelmRepository
-        name: opencti
-  values:
-    # your overrides here
 ```
+
+> ⚠️ `flux reconcile source helm` does not work for OCI HelmRepositories. Use suspend/resume to force updates.
 
 ## Resource Budget
 
 | Component | CPU | Memory | Storage |
 |-----------|-----|--------|---------|
-| Server | 2 | 4-8Gi | — |
-| Workers ×3 | 1.5 | 1.5-3Gi | — |
-| OpenSearch | 2 | 4-6Gi | 100Gi |
-| RabbitMQ | 0.5 | 1Gi | 10Gi |
+| Server | 2 | 4–8Gi | — |
+| Workers (×3) | 1.5 | 1.5–3Gi | — |
+| OpenSearch | 2 | 4–6Gi | 100Gi |
+| RabbitMQ | 0.25 | 0.5–1Gi | 10Gi |
 | MinIO | 0.25 | 512Mi | 20Gi |
-| Connectors (×10) | 1 | 2.5-5Gi | — |
-| **Total** | **~7** | **~14-24Gi** | **~130Gi** |
+| Connectors (×8) | 0.8 | 2–4Gi | — |
+| **Total** | **~7** | **~13–23Gi** | **~130Gi** |
 
 ## License
 
