@@ -41,4 +41,10 @@ jobs:
           if helm template test opencti > /dev/null 2> err.txt; then
             echo "expected a failure when no credentials are set"; exit 1
           fi
+          cat err.txt
+          # With the bundled S3 configured, the chart's own check must fire.
+          if helm template test opencti --set rustfs.secret.rustfs.secret_key=x > /dev/null 2> err.txt; then
+            echo "expected a failure when no OpenCTI credentials are set"; exit 1
+          fi
+          cat err.txt
           grep -q "is required" err.txt
