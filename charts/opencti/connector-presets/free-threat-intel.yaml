@@ -9,6 +9,7 @@
 #     -f free-threat-intel.yaml \
 #     --set opencti.adminPassword=changeme \
 #     --set opencti.adminToken=$(uuidgen) \
+#     --set opencti.encryptionKey=$(openssl rand -base64 32) \
 #     --set rabbitmq.auth.password=changeme \
 #     --set externalRedis.hostname=your-redis-host
 #
@@ -92,7 +93,7 @@ connectors:
   epss:
     enabled: true
     image:
-      repository: opencti/connector-epss
+      repository: opencti/connector-first-epss
     env:
       CONNECTOR_ID: "d4b6f8a0-2c5e-7d1f-e9a4-b6c8d0e2f4a6"
       CONNECTOR_NAME: "EPSS"

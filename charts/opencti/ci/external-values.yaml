@@ -1,0 +1,57 @@
+# Everything external, every credential from an existing Secret, all optional
+# resources switched on. Used by CI (lint + template).
+opencti:
+  basePath: /cti
+  adminPasswordExistingSecret: {name: opencti-credentials, key: password}
+  adminTokenExistingSecret: {name: opencti-credentials, key: token}
+  encryptionKeyExistingSecret: {name: opencti-credentials, key: encryption-key}
+  connectorTokenExistingSecret: {name: opencti-credentials, key: connector-token}
+  healthAccessKeyExistingSecret: {name: opencti-credentials, key: health-access-key}
+opensearch:
+  enabled: false
+rustfs:
+  enabled: false
+rabbitmq:
+  enabled: false
+externalElasticsearch:
+  enabled: true
+  url: https://opensearch.database.svc.cluster.local
+  username: opencti
+  existingSecret: {name: opensearch-credentials}
+externalRedis:
+  hostname: dragonfly.database.svc.cluster.local
+  existingSecret: {name: dragonfly-credentials}
+externalRabbitmq:
+  enabled: true
+  hostname: rabbitmq.database.svc.cluster.local
+  existingSecret: {name: rabbitmq-credentials}
+externalS3:
+  enabled: true
+  endpoint: garage.storage.svc.cluster.local
+  port: 3900
+  region: garage
+  existingSecret: {name: opencti-s3}
+serviceMonitor:
+  enabled: true
+server:
+  route:
+    enabled: true
+    parentRefs:
+      - name: internal
+        namespace: kube-system
+    hostnames:
+      - opencti.example.com
+  podDisruptionBudget:
+    enabled: true
+worker:
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+connectors:
+  cve:
+    enabled: true
+    env:
+      CONNECTOR_ID: 0c7d0f4e-6f3e-4c41-9b1b-6f2a54a3b1d7
+      CONNECTOR_NAME: CVE
+    envFromSecrets:
+      CVE_API_KEY: {name: opencti-connectors, key: nvd-api-key}

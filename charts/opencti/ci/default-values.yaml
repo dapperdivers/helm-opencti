@@ -1,0 +1,22 @@
+# Self-contained install: every backend bundled, credentials inline.
+# Used by CI (lint + template). Values are throwaway.
+opencti:
+  adminPassword: ci-password
+  adminToken: 6e8b5c1e-3f0a-4d0e-9c53-2b8a0f6d7c11
+  encryptionKey: Y2ktb25seS1ub3QtYS1yZWFsLWtleS0wMTIzNDU2Nzg5MA==
+rabbitmq:
+  auth:
+    password: ci-rabbitmq
+rustfs:
+  secret:
+    rustfs:
+      secret_key: ci-rustfs-secret
+redis:
+  enabled: true
+connectors:
+  mitre:
+    enabled: true
+    env:
+      CONNECTOR_ID: 5d7b1a7e-2c44-4d0b-8a57-0e1f6f0b9a21
+      CONNECTOR_NAME: MITRE ATT&CK
+      CONNECTOR_SCOPE: tool,report,malware,identity,campaign,intrusion-set,attack-pattern,course-of-action

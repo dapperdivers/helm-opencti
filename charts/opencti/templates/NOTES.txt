@@ -13,9 +13,7 @@ Access the platform via port-forward:
 
 GraphQL API: http://{{ include "opencti.fullname" . }}-server.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.server.service.port }}/graphql
 
-{{- if .Values.opencti.adminTokenExistingSecret }}
-Admin token: stored in Secret "{{ .Values.opencti.adminTokenExistingSecret.name }}"
-{{- end }}
+Admin token: stored in Secret "{{ dig "name" (include "opencti.credentialsSecretName" .) (.Values.opencti.adminTokenExistingSecret | default dict) }}"
 
 Components:
   ✅ Server: {{ .Values.server.replicaCount | default 1 }} replica(s)
@@ -23,5 +21,5 @@ Components:
   ✅ Connectors: {{ len .Values.connectors }} configured
   ✅ OpenSearch: {{ if .Values.opensearch.enabled }}subchart{{ else }}external{{ end }}
   ✅ RabbitMQ: {{ if .Values.rabbitmq.enabled }}native (built-in){{ else }}external{{ end }}
-  ✅ MinIO: {{ if .Values.minio.enabled }}subchart{{ else }}external S3{{ end }}
-  ✅ Redis: {{ if .Values.externalRedis.enabled }}external{{ else }}not configured{{ end }}
+  ✅ S3: {{ if .Values.externalS3.enabled }}external ({{ .Values.externalS3.endpoint }}){{ else }}RustFS subchart{{ end }}
+  ✅ Redis: {{ if .Values.redis.enabled }}Dragonfly subchart{{ else }}external ({{ .Values.externalRedis.hostname }}){{ end }}

@@ -15,6 +15,8 @@ spec:
       app.kubernetes.io/component: rabbitmq
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/rabbitmq/configmap.yaml") . | sha256sum }}
       labels:
         {{- include "opencti.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: rabbitmq
@@ -38,14 +40,7 @@ spec:
             - name: RABBITMQ_DEFAULT_USER
               value: {{ .Values.rabbitmq.auth.username | quote }}
             - name: RABBITMQ_DEFAULT_PASS
-              {{- if .Values.rabbitmq.auth.existingSecret }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.rabbitmq.auth.existingSecret.name }}
-                  key: {{ .Values.rabbitmq.auth.existingSecret.key | default "rabbitmq-password" }}
-              {{- else }}
-              value: {{ required "rabbitmq.auth.password is required" .Values.rabbitmq.auth.password | quote }}
-              {{- end }}
+              {{- include "opencti.rabbitmqPasswordRef" . | nindent 14 }}
             - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
               value: "-rabbit consumer_timeout {{ .Values.rabbitmq.consumerTimeout | default 86400000 | int64 }}"
           volumeMounts:

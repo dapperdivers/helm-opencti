@@ -18,10 +18,11 @@ spec:
       opencti.connector: {{ $name }}
   template:
     metadata:
-      {{- with $connector.podAnnotations }}
       annotations:
+        checksum/credentials: {{ include "opencti.credentialsData" $ | sha256sum }}
+        {{- with $connector.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       labels:
         {{- include "opencti.selectorLabels" $ | nindent 8 }}
         app.kubernetes.io/component: connector
@@ -40,7 +41,7 @@ spec:
       {{- end }}
       {{- if $.Values.readyChecker.enabled }}
       initContainers:
-        {{- include "opencti.readyChecker" (dict "name" "server" "host" (printf "%s-server" (include "opencti.fullname" $)) "port" ($.Values.server.service.port | default 80) "retries" $.Values.readyChecker.retries "timeout" $.Values.readyChecker.timeout "image" $.Values.readyChecker.image) | nindent 8 }}
+        {{- include "opencti.readyChecker" (dict "root" $ "name" "server" "host" (printf "%s-server" (include "opencti.fullname" $)) "port" $.Values.server.service.port) | nindent 8 }}
       {{- end }}
       containers:
         - name: connector

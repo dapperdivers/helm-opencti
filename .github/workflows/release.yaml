@@ -34,7 +34,7 @@ jobs:
       - name: Add Helm repos
         run: |
           helm repo add opensearch https://opensearch-project.github.io/helm-charts/
-          helm repo add minio https://charts.min.io/
+          helm repo add rustfs https://charts.rustfs.com
           helm repo update
 
       - name: Package chart

@@ -28,21 +28,41 @@ serviceAccount:
 # ============================================================================
 opencti:
   adminEmail: admin@opencti.io
-  adminPassword: ""          # REQUIRED — set via --set or existingSecret
-  adminToken: ""             # REQUIRED — UUID, set via --set or existingSecret
 
-  # Use existing K8s secrets instead of plaintext values
-  # adminPasswordExistingSecret:
+  # Every credential below can be given inline (stored in the chart-managed
+  # "<fullname>-credentials" Secret) or read from a Secret you manage with the
+  # matching *ExistingSecret: {name, key}. Pods only ever see secretKeyRefs.
+
+  adminPassword: ""          # REQUIRED unless adminPasswordExistingSecret is set
+  adminPasswordExistingSecret: {}
   #   name: opencti-credentials
-  #   key: password
-  # adminTokenExistingSecret:
+  #   key: password            # default: password
+
+  adminToken: ""             # REQUIRED (UUIDv4) unless adminTokenExistingSecret is set
+  adminTokenExistingSecret: {}
   #   name: opencti-credentials
-  #   key: token
+  #   key: token               # default: token
+
+  # -- Mandatory since OpenCTI 7. Generate once with `openssl rand -base64 32`
+  # and never change it afterwards: it encrypts API tokens stored in the platform.
+  encryptionKey: ""          # REQUIRED unless encryptionKeyExistingSecret is set
+  encryptionKeyExistingSecret: {}
+  #   name: opencti-credentials
+  #   key: encryption-key      # default: encryption-key
+
+  # -- Optional separate token for connectors (least privilege). Defaults to the admin token.
+  connectorTokenExistingSecret: {}
+  #   name: opencti-credentials
+  #   key: connector-token     # default: token
+
+  # -- Key for the /health endpoint. Defaults to the admin token when both are empty.
+  # Probes read it from the container environment, so it never appears in the pod spec.
+  healthAccessKey: ""
+  healthAccessKeyExistingSecret: {}
+  #   name: opencti-credentials
+  #   key: health-access-key   # default: health-access-key
 
   basePath: "/"
-  healthAccessKey: ""        # defaults to adminToken if empty
-                              # ⚠️  WARNING: This value appears in plaintext in pod spec (health probe URLs).
-                              # A future release will move to path-based probes to avoid exposure.
 
   metrics:
     enabled: true
@@ -85,6 +105,25 @@ server:
     #         pathType: Prefix
     tls: []
 
+  # -- Gateway API HTTPRoute (alternative to ingress)
+  route:
+    enabled: false
+    annotations: {}
+    labels: {}
+    parentRefs: []
+    #   - name: internal
+    #     namespace: kube-system
+    #     sectionName: https
+    hostnames: []
+    #   - opencti.example.com
+    matches: []              # defaults to PathPrefix on opencti.basePath
+    filters: []
+
+  podDisruptionBudget:
+    enabled: false
+    # minAvailable: 1        # takes precedence over maxUnavailable when set
+    maxUnavailable: 1
+
   resources:
     requests:
       cpu: "2"
@@ -92,33 +131,49 @@ server:
     limits:
       memory: 8Gi
 
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 180
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-
+  # Probes call /health from inside the container (see templates/_helpers.tpl).
+  # The startup probe gates the other two, so they need no initial delay.
   startupProbe:
     enabled: true
     initialDelaySeconds: 0
     periodSeconds: 10
-    failureThreshold: 30     # 5 minutes total (10s × 30)
+    timeoutSeconds: 5
+    failureThreshold: 60     # 10 minutes for first boot / migrations
+
+  # Liveness tolerates 90s of failed checks so a busy server is not restarted.
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 0
+    periodSeconds: 15
+    timeoutSeconds: 10
+    failureThreshold: 6
+
+  # Readiness only removes the pod from the Service, so it can be stricter.
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
 
   podAnnotations: {}
   podLabels: {}
-  podSecurityContext: {}
-  securityContext: {}
+  podSecurityContext:
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  # /tmp is always mounted as an emptyDir, so the root filesystem can stay read-only.
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 1000
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
   volumes: []
   volumeMounts: []
   initContainers: []
@@ -153,21 +208,51 @@ worker:
     limits:
       memory: 1Gi
 
+  podDisruptionBudget:
+    enabled: false
+    # minAvailable: 1        # takes precedence over maxUnavailable when set
+    maxUnavailable: 1
+
   podAnnotations: {}
   podLabels: {}
-  podSecurityContext: {}
-  securityContext: {}
+  podSecurityContext:
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 1000
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  volumes: []
+  volumeMounts: []
   initContainers: []
   extraEnv: []
   envFrom: []
   terminationGracePeriodSeconds: 30
 
 # ============================================================================
+# MONITORING — Prometheus Operator resources
+# Creates a ServiceMonitor for the server and a PodMonitor for the workers.
+# ============================================================================
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  relabelings: []
+  metricRelabelings: []
+
+# ============================================================================
 # EXTERNAL SERVICES — first-class config blocks (not raw env vars!)
 # Set enabled: true + connection details. Auto-wired into all components.
+# Passwords can be inline or come from existingSecret.
 # ============================================================================
 
 # -- External Elasticsearch/OpenSearch (when opensearch subchart is disabled)
@@ -176,17 +261,22 @@ externalElasticsearch:
   url: ""                     # e.g., http://opensearch.database:9200
   username: ""
   password: ""
+  existingSecret: {}
+  #   name: opensearch-credentials
+  #   key: password            # default: password
 
-# -- External Redis / Dragonfly / Valkey
-# No built-in Redis subchart — external is the default pattern
+# -- External Redis / Dragonfly / Valkey (used unless redis.enabled=true)
 externalRedis:
   enabled: true
   hostname: ""                # REQUIRED — e.g., dragonfly.database.svc.cluster.local
   port: 6379
   mode: single                # single | sentinel | cluster
   password: ""
+  existingSecret: {}
+  #   name: redis-credentials
+  #   key: password            # default: password
 
-# -- External RabbitMQ (when rabbitmq subchart is disabled)
+# -- External RabbitMQ (takes precedence over the built-in RabbitMQ)
 externalRabbitmq:
   enabled: false
   hostname: ""
@@ -194,14 +284,26 @@ externalRabbitmq:
   managementPort: 15672
   username: user
   password: ""
+  existingSecret: {}
+  #   name: rabbitmq-credentials
+  #   key: rabbitmq-password   # default: rabbitmq-password
 
-# -- External S3/MinIO (when minio subchart is disabled)
+# -- External S3 (takes precedence over the rustfs subchart)
+# Works with Garage, AWS S3, Ceph RGW, or any other S3-compatible store.
+# Garage example:
+#   endpoint: garage.storage.svc.cluster.local
+#   port: 3900
+#   region: garage             # must match s3_region in garage.toml
 externalS3:
   enabled: false
-  endpoint: ""                # e.g., minio.storage:9000
-  port: 9000                  # -- S3/MinIO port
+  endpoint: ""                # hostname only, no scheme
+  port: 9000
   accessKey: ""
   secretKey: ""
+  existingSecret: {}
+  #   name: opencti-s3
+  #   accessKeyKey: access-key # default: access-key
+  #   secretKeyKey: secret-key # default: secret-key
   bucketName: opencti-bucket
   region: ""
   useSSL: false
@@ -245,10 +347,10 @@ rabbitmq:
     pullPolicy: IfNotPresent
   auth:
     username: user
-    password: ""              # REQUIRED — set via --set or existingSecret
-    # existingSecret:
+    password: ""              # REQUIRED unless existingSecret is set
+    existingSecret: {}
     #   name: rabbitmq-credentials
-    #   key: rabbitmq-password
+    #   key: rabbitmq-password   # default: rabbitmq-password
   # OpenCTI-specific settings
   consumerTimeout: 86400000     # 24h — OpenCTI connectors need long timeouts
   maxMessageSize: 536870912     # 512MB — STIX bundles can be large
@@ -265,15 +367,45 @@ rabbitmq:
   nodeSelector: {}
   tolerations: []
 
-# -- MinIO subchart
-minio:
+# -- Bundled Redis-compatible store (Dragonfly subchart, aliased as "redis").
+# Off by default: point externalRedis at an existing instance, or enable this
+# for a self-contained install. No authentication is configured.
+redis:
+  enabled: false
+  storage:
+    enabled: false
+  # Dragonfly needs 256MiB per thread and defaults to one thread per host core,
+  # so the thread count is pinned to fit the memory limit below.
+  extraArgs:
+    - --cache_mode=true
+    - --proactor_threads=2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+# -- RustFS subchart: bundled S3-compatible object storage.
+# Disable it and use externalS3 for Garage, AWS S3 or another S3 store.
+# (Replaces the MinIO subchart, whose container images are no longer published.)
+rustfs:
   enabled: true
-  mode: standalone
-  rootUser: minioadmin
-  rootPassword: minioadmin    # Override in production!
-  persistence:
-    enabled: true
-    size: 20Gi
+  mode:
+    standalone:
+      enabled: true
+    distributed:
+      enabled: false
+  ingress:
+    enabled: false
+  secret:
+    rustfs:
+      access_key: opencti
+      secret_key: ""            # REQUIRED while rustfs.enabled=true
+  storageclass:
+    name: ""                    # empty = cluster default StorageClass
+    dataStorageSize: 20Gi
+    logStorageSize: 256Mi
   resources:
     requests:
       cpu: 250m
