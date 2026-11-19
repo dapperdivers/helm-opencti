@@ -328,8 +328,14 @@ opensearch:
     enabled: true
     size: 100Gi
     # storageClass: ""
+    # Subchart default is busybox:latest, which policies that forbid `latest` reject.
+    image: busybox
+    imageTag: "1.37"
   sysctlInit:
     enabled: true            # sets vm.max_map_count
+    # Subchart default is busybox:latest, which policies that forbid `latest` reject.
+    image: busybox
+    imageTag: "1.37"
   securityConfig:
     enabled: false           # disable security for internal-only access
   config:
