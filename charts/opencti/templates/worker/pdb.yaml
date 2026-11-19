@@ -1,0 +1,17 @@
+{{- if and .Values.worker.enabled .Values.worker.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "opencti.fullname" . }}-worker
+  labels:
+    {{- include "opencti.workerLabels" . | nindent 4 }}
+spec:
+  {{- if not (kindIs "invalid" .Values.worker.podDisruptionBudget.minAvailable) }}
+  minAvailable: {{ .Values.worker.podDisruptionBudget.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.worker.podDisruptionBudget.maxUnavailable | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "opencti.workerSelectorLabels" . | nindent 6 }}
+{{- end }}

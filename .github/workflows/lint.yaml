@@ -17,16 +17,28 @@ jobs:
       - name: Add Helm repos
         run: |
           helm repo add opensearch https://opensearch-project.github.io/helm-charts/
-          helm repo add minio https://charts.min.io/
+          helm repo add rustfs https://charts.rustfs.com
           helm repo update
 
-      - name: Lint
+      - name: Build dependencies
         run: |
           cd charts
           helm dependency build opencti
-          helm lint opencti
 
-      - name: Template (default values)
+      - name: Lint and template (each ci/*-values.yaml)
         run: |
           cd charts
-          helm template test opencti --set server.adminToken=test-token
+          for values in opencti/ci/*-values.yaml; do
+            echo "::group::$values"
+            helm lint opencti -f "$values"
+            helm template test opencti -f "$values" > /dev/null
+            echo "::endgroup::"
+          done
+
+      - name: Required values fail with a clear message
+        run: |
+          cd charts
+          if helm template test opencti > /dev/null 2> err.txt; then
+            echo "expected a failure when no credentials are set"; exit 1
+          fi
+          grep -q "is required" err.txt

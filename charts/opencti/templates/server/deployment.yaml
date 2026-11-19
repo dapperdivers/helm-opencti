@@ -17,6 +17,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include "opencti.serverEnv" . | sha256sum }}
+        checksum/credentials: {{ include "opencti.credentialsData" . | sha256sum }}
         {{- with .Values.server.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -35,28 +36,15 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if or .Values.readyChecker.enabled .Values.server.initContainers }}
       initContainers:
-        {{- /* Auto-wired readyCheckers — always enabled by default */}}
         {{- if .Values.readyChecker.enabled }}
-        {{- if .Values.opensearch.enabled }}
-        {{- include "opencti.readyChecker" (dict "name" "opensearch" "host" (.Values.opensearch.fullnameOverride | default (printf "%s-opensearch-cluster-master" .Release.Name)) "port" 9200 "retries" .Values.readyChecker.retries "timeout" .Values.readyChecker.timeout "image" .Values.readyChecker.image) | nindent 8 }}
-        {{- else if .Values.externalElasticsearch.enabled }}
-        {{- $esUrl := urlParse .Values.externalElasticsearch.url }}
-        {{- include "opencti.readyChecker" (dict "name" "elasticsearch" "host" $esUrl.host "port" ($esUrl.port | default 9200) "retries" .Values.readyChecker.retries "timeout" .Values.readyChecker.timeout "image" .Values.readyChecker.image) | nindent 8 }}
-        {{- end }}
-        {{- if .Values.rabbitmq.enabled }}
-        {{- include "opencti.readyChecker" (dict "name" "rabbitmq" "host" (printf "%s-rabbitmq" (include "opencti.fullname" .)) "port" 5672 "retries" .Values.readyChecker.retries "timeout" .Values.readyChecker.timeout "image" .Values.readyChecker.image) | nindent 8 }}
-        {{- end }}
-        {{- if .Values.externalRedis.enabled }}
-        {{- include "opencti.readyChecker" (dict "name" "redis" "host" .Values.externalRedis.hostname "port" (.Values.externalRedis.port | default 6379) "retries" .Values.readyChecker.retries "timeout" .Values.readyChecker.timeout "image" .Values.readyChecker.image) | nindent 8 }}
-        {{- end }}
-        {{- if .Values.minio.enabled }}
-        {{- include "opencti.readyChecker" (dict "name" "minio" "host" (printf "%s-minio" (include "opencti.fullname" .)) "port" 9000 "retries" .Values.readyChecker.retries "timeout" .Values.readyChecker.timeout "image" .Values.readyChecker.image) | nindent 8 }}
-        {{- end }}
+        {{- include "opencti.dependencyCheckers" . | nindent 8 }}
         {{- end }}
         {{- with .Values.server.initContainers }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+      {{- end }}
       containers:
         - name: opencti-server
           {{- with .Values.server.securityContext }}
@@ -85,44 +73,47 @@ spec:
           {{- end }}
           {{- if .Values.server.livenessProbe.enabled }}
           livenessProbe:
-            httpGet:
-              path: /health?health_access_key={{ include "opencti.healthAccessKey" . }}
-              port: http
-            initialDelaySeconds: {{ .Values.server.livenessProbe.initialDelaySeconds | default 180 }}
-            periodSeconds: {{ .Values.server.livenessProbe.periodSeconds | default 10 }}
-            timeoutSeconds: {{ .Values.server.livenessProbe.timeoutSeconds | default 5 }}
-            failureThreshold: {{ .Values.server.livenessProbe.failureThreshold | default 3 }}
+            {{- include "opencti.healthProbe" . | nindent 12 }}
+            initialDelaySeconds: {{ .Values.server.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.server.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.server.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.server.livenessProbe.failureThreshold }}
           {{- end }}
           {{- if .Values.server.readinessProbe.enabled }}
           readinessProbe:
-            httpGet:
-              path: /health?health_access_key={{ include "opencti.healthAccessKey" . }}
-              port: http
-            initialDelaySeconds: {{ .Values.server.readinessProbe.initialDelaySeconds | default 30 }}
-            periodSeconds: {{ .Values.server.readinessProbe.periodSeconds | default 10 }}
-            timeoutSeconds: {{ .Values.server.readinessProbe.timeoutSeconds | default 5 }}
-            failureThreshold: {{ .Values.server.readinessProbe.failureThreshold | default 3 }}
+            {{- include "opencti.healthProbe" . | nindent 12 }}
+            initialDelaySeconds: {{ .Values.server.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.server.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.server.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.server.readinessProbe.failureThreshold }}
           {{- end }}
           {{- if .Values.server.startupProbe.enabled }}
           startupProbe:
-            httpGet:
-              path: /health?health_access_key={{ include "opencti.healthAccessKey" . }}
-              port: http
-            initialDelaySeconds: {{ .Values.server.startupProbe.initialDelaySeconds | default 0 }}
-            periodSeconds: {{ .Values.server.startupProbe.periodSeconds | default 10 }}
-            failureThreshold: {{ .Values.server.startupProbe.failureThreshold | default 30 }}
+            {{- include "opencti.healthProbe" . | nindent 12 }}
+            initialDelaySeconds: {{ .Values.server.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.server.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.server.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.server.startupProbe.failureThreshold }}
           {{- end }}
           {{- with .Values.server.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.server.volumeMounts }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.server.volumeMounts }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- end }}
       terminationGracePeriodSeconds: {{ .Values.server.terminationGracePeriodSeconds | default 30 }}
-      {{- with .Values.server.volumes }}
       volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- with .Values.server.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.server.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.server.nodeSelector }}

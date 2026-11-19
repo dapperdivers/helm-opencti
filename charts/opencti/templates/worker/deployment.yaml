@@ -18,6 +18,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include "opencti.workerEnv" . | sha256sum }}
+        checksum/credentials: {{ include "opencti.credentialsData" . | sha256sum }}
         {{- with .Values.worker.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -36,13 +37,15 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if or .Values.readyChecker.enabled .Values.worker.initContainers }}
       initContainers:
         {{- if .Values.readyChecker.enabled }}
-        {{- include "opencti.readyChecker" (dict "name" "server" "host" (printf "%s-server" (include "opencti.fullname" .)) "port" (.Values.server.service.port | default 80) "retries" .Values.readyChecker.retries "timeout" .Values.readyChecker.timeout "image" .Values.readyChecker.image) | nindent 8 }}
+        {{- include "opencti.readyChecker" (dict "root" . "name" "server" "host" (printf "%s-server" (include "opencti.fullname" .)) "port" .Values.server.service.port) | nindent 8 }}
         {{- end }}
         {{- with .Values.worker.initContainers }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+      {{- end }}
       containers:
         - name: opencti-worker
           {{- with .Values.worker.securityContext }}
@@ -70,7 +73,23 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.worker.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       terminationGracePeriodSeconds: {{ .Values.worker.terminationGracePeriodSeconds | default 30 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- with .Values.worker.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.worker.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.worker.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

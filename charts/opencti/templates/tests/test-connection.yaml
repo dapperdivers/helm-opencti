@@ -6,10 +6,16 @@ metadata:
     {{- include "opencti.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
+  restartPolicy: Never
   containers:
     - name: wget
-      image: busybox:1.37
-      command: ['wget']
-      args: ['{{ include "opencti.fullname" . }}-server:{{ .Values.server.service.port | default 80 }}/health?health_access_key={{ include "opencti.healthAccessKey" . }}']
-  restartPolicy: Never
+      image: {{ .Values.readyChecker.image | default "busybox:1.37" }}
+      env:
+        - name: HEALTH_ACCESS_KEY
+          {{- include "opencti.healthAccessKeyRef" . | nindent 10 }}
+      command:
+        - sh
+        - -c
+        - wget -q -O /dev/null "http://{{ include "opencti.fullname" . }}-server:{{ .Values.server.service.port }}{{ include "opencti.basePathPrefix" . }}/health?health_access_key=${HEALTH_ACCESS_KEY}"

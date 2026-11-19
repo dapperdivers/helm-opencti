@@ -78,55 +78,97 @@ ServiceAccount name
 {{- end }}
 
 {{/* ======================================================================
-     AUTO-WIRING: Resolve service URLs from chart state
+     AUTO-WIRING: Resolve service names from chart state
      ====================================================================== */}}
 
 {{/*
-Elasticsearch/OpenSearch URL — auto-wired from subchart or external config
+Fullname of a subchart that uses the standard Helm fullname convention.
+Usage: include "opencti.subchartFullname" (dict "root" . "name" "redis" "values" .Values.redis)
+*/}}
+{{- define "opencti.subchartFullname" -}}
+{{- if .values.fullnameOverride -}}
+  {{- .values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+  {{- $name := default .name .values.nameOverride -}}
+  {{- if contains $name .root.Release.Name -}}
+    {{- .root.Release.Name | trunc 63 | trimSuffix "-" -}}
+  {{- else -}}
+    {{- printf "%s-%s" .root.Release.Name $name | trunc 63 | trimSuffix "-" -}}
+  {{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+OpenSearch subchart service name. The opensearch chart names its service
+<clusterName>-<nodeGroup> and does not include the release name.
+*/}}
+{{- define "opencti.opensearchHost" -}}
+{{- if .Values.opensearch.fullnameOverride -}}
+  {{- .Values.opensearch.fullnameOverride -}}
+{{- else -}}
+  {{- printf "%s-%s" (.Values.opensearch.clusterName | default "opensearch-cluster") (.Values.opensearch.nodeGroup | default "master") -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+RustFS subchart service name (the rustfs chart always appends "-svc")
+*/}}
+{{- define "opencti.rustfsHost" -}}
+{{- include "opencti.subchartFullname" (dict "root" . "name" "rustfs" "values" .Values.rustfs) -}}-svc
+{{- end }}
+
+{{- define "opencti.redisSubchartHost" -}}
+{{- include "opencti.subchartFullname" (dict "root" . "name" "redis" "values" .Values.redis) -}}
+{{- end }}
+
+{{/*
+Elasticsearch/OpenSearch URL
 */}}
 {{- define "opencti.elasticsearchUrl" -}}
 {{- if .Values.externalElasticsearch.enabled -}}
-  {{- .Values.externalElasticsearch.url -}}
+  {{- required "externalElasticsearch.url is required when externalElasticsearch.enabled=true" .Values.externalElasticsearch.url -}}
 {{- else if .Values.opensearch.enabled -}}
-  http://{{ .Values.opensearch.fullnameOverride | default (printf "%s-opensearch-cluster-master" .Release.Name) }}:9200
+  http://{{ include "opencti.opensearchHost" . }}:9200
 {{- else -}}
   {{- fail "Either opensearch.enabled or externalElasticsearch.enabled must be true" -}}
 {{- end -}}
 {{- end }}
 
 {{/*
-Redis URL components — auto-wired from subchart or external config
+Redis — bundled Dragonfly subchart (redis.enabled) wins, otherwise externalRedis
 */}}
 {{- define "opencti.redisHostname" -}}
-{{- if .Values.externalRedis.enabled -}}
-  {{- .Values.externalRedis.hostname -}}
+{{- if .Values.redis.enabled -}}
+  {{- include "opencti.redisSubchartHost" . -}}
+{{- else if .Values.externalRedis.enabled -}}
+  {{- required "externalRedis.hostname is required (or set redis.enabled=true to deploy the bundled Dragonfly)" .Values.externalRedis.hostname -}}
 {{- else -}}
-  {{- fail "externalRedis.enabled must be true (no built-in Redis subchart; use Dragonfly, Redis, or Valkey)" -}}
+  {{- fail "Either redis.enabled or externalRedis.enabled must be true" -}}
 {{- end -}}
 {{- end }}
 
 {{- define "opencti.redisPort" -}}
-{{- if .Values.externalRedis.enabled -}}
-  {{- .Values.externalRedis.port | default 6379 -}}
-{{- else -}}
+{{- if .Values.redis.enabled -}}
   6379
+{{- else -}}
+  {{- .Values.externalRedis.port | default 6379 -}}
 {{- end -}}
 {{- end }}
 
 {{- define "opencti.redisMode" -}}
-{{- if .Values.externalRedis.enabled -}}
-  {{- .Values.externalRedis.mode | default "single" -}}
-{{- else -}}
+{{- if .Values.redis.enabled -}}
   single
+{{- else -}}
+  {{- .Values.externalRedis.mode | default "single" -}}
 {{- end -}}
 {{- end }}
 
 {{/*
-RabbitMQ — auto-wired from subchart or external config
+RabbitMQ
 */}}
 {{- define "opencti.rabbitmqHostname" -}}
 {{- if .Values.externalRabbitmq.enabled -}}
-  {{- .Values.externalRabbitmq.hostname -}}
+  {{- required "externalRabbitmq.hostname is required when externalRabbitmq.enabled=true" .Values.externalRabbitmq.hostname -}}
 {{- else if .Values.rabbitmq.enabled -}}
   {{- include "opencti.fullname" . }}-rabbitmq
 {{- else -}}
@@ -154,20 +196,20 @@ RabbitMQ — auto-wired from subchart or external config
 {{- if .Values.externalRabbitmq.enabled -}}
   {{- .Values.externalRabbitmq.username | default "user" -}}
 {{- else -}}
-  user
+  {{- .Values.rabbitmq.auth.username | default "user" -}}
 {{- end -}}
 {{- end }}
 
 {{/*
-MinIO/S3 — auto-wired from subchart or external config
+S3 — externalS3 (Garage, AWS, Ceph RGW, ...) or the RustFS subchart
 */}}
 {{- define "opencti.minioEndpoint" -}}
 {{- if .Values.externalS3.enabled -}}
-  {{- .Values.externalS3.endpoint -}}
-{{- else if .Values.minio.enabled -}}
-  {{- printf "%s-minio" (include "opencti.fullname" .) -}}
+  {{- required "externalS3.endpoint is required when externalS3.enabled=true" .Values.externalS3.endpoint -}}
+{{- else if .Values.rustfs.enabled -}}
+  {{- include "opencti.rustfsHost" . -}}
 {{- else -}}
-  {{- fail "Either minio.enabled or externalS3.enabled must be true" -}}
+  {{- fail "Either rustfs.enabled or externalS3.enabled must be true" -}}
 {{- end -}}
 {{- end }}
 
@@ -175,32 +217,116 @@ MinIO/S3 — auto-wired from subchart or external config
 OpenCTI server internal URL (for workers + connectors)
 */}}
 {{- define "opencti.serverUrl" -}}
-http://{{ include "opencti.fullname" . }}-server:{{ .Values.server.service.port }}
+http://{{ include "opencti.fullname" . }}-server:{{ .Values.server.service.port }}{{ include "opencti.basePathPrefix" . }}
 {{- end }}
 
 {{/*
-Admin token — resolved from secret or values
-The single source of truth, propagated to workers + connectors automatically.
+Base path without trailing slash ("" when basePath is "/")
 */}}
-{{- define "opencti.adminToken" -}}
-{{- if .Values.opencti.adminTokenExistingSecret -}}
-  __FROM_SECRET__
-{{- else -}}
-  {{- required "opencti.adminToken is required (or set opencti.adminTokenExistingSecret)" .Values.opencti.adminToken -}}
-{{- end -}}
+{{- define "opencti.basePathPrefix" -}}
+{{- .Values.opencti.basePath | default "/" | trimSuffix "/" -}}
+{{- end }}
+
+{{/* ======================================================================
+     CREDENTIALS: every credential reaches pods through a secretKeyRef.
+     Inline values land in the chart-managed "<fullname>-credentials" Secret;
+     *ExistingSecret / existingSecret options point at your own Secret.
+     ====================================================================== */}}
+
+{{- define "opencti.credentialsSecretName" -}}
+{{- include "opencti.fullname" . }}-credentials
 {{- end }}
 
 {{/*
-Health access key
+Render a valueFrom.secretKeyRef block.
+Usage: include "opencti.secretRef" (dict "root" . "existing" $ref "defaultKey" "token" "chartKey" "admin-token")
+  existing   — optional {name, key} pointing at a user-managed Secret
+  defaultKey — key used when existing.key is not set
+  chartKey   — key in the chart-managed credentials Secret (used when existing is empty)
 */}}
-{{- define "opencti.healthAccessKey" -}}
-{{- if .Values.opencti.healthAccessKey -}}
-  {{- .Values.opencti.healthAccessKey -}}
-{{- else if not .Values.opencti.adminTokenExistingSecret -}}
-  {{- include "opencti.adminToken" . -}}
-{{- else -}}
-  {{- fail "opencti.healthAccessKey is required when using adminTokenExistingSecret (token not available at template time)" -}}
-{{- end -}}
+{{- define "opencti.secretRef" -}}
+valueFrom:
+  secretKeyRef:
+    {{- if and .existing .existing.name }}
+    name: {{ .existing.name }}
+    key: {{ .existing.key | default .defaultKey }}
+    {{- else }}
+    name: {{ include "opencti.credentialsSecretName" .root }}
+    key: {{ .chartKey }}
+    {{- end }}
+{{- end }}
+
+{{- define "opencti.adminTokenRef" -}}
+{{- include "opencti.secretRef" (dict "root" . "existing" .Values.opencti.adminTokenExistingSecret "defaultKey" "token" "chartKey" "admin-token") }}
+{{- end }}
+
+{{- define "opencti.connectorTokenRef" -}}
+{{- if .Values.opencti.connectorTokenExistingSecret }}
+{{- include "opencti.secretRef" (dict "root" . "existing" .Values.opencti.connectorTokenExistingSecret "defaultKey" "token" "chartKey" "admin-token") }}
+{{- else }}
+{{- include "opencti.adminTokenRef" . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Health access key: its own secret, its own inline value, or the admin token.
+*/}}
+{{- define "opencti.healthAccessKeyRef" -}}
+{{- if .Values.opencti.healthAccessKeyExistingSecret }}
+{{- include "opencti.secretRef" (dict "root" . "existing" .Values.opencti.healthAccessKeyExistingSecret "defaultKey" "health-access-key" "chartKey" "health-access-key") }}
+{{- else if .Values.opencti.healthAccessKey }}
+{{- include "opencti.secretRef" (dict "root" . "chartKey" "health-access-key") }}
+{{- else }}
+{{- include "opencti.adminTokenRef" . }}
+{{- end }}
+{{- end }}
+
+{{- define "opencti.rabbitmqPasswordRef" -}}
+{{- if .Values.externalRabbitmq.enabled }}
+{{- include "opencti.secretRef" (dict "root" . "existing" .Values.externalRabbitmq.existingSecret "defaultKey" "rabbitmq-password" "chartKey" "rabbitmq-password") }}
+{{- else }}
+{{- include "opencti.secretRef" (dict "root" . "existing" .Values.rabbitmq.auth.existingSecret "defaultKey" "rabbitmq-password" "chartKey" "rabbitmq-password") }}
+{{- end }}
+{{- end }}
+
+{{/*
+Contents of the chart-managed credentials Secret (only inline values).
+*/}}
+{{- define "opencti.credentialsData" -}}
+{{- if not .Values.opencti.adminTokenExistingSecret }}
+admin-token: {{ required "opencti.adminToken is required (or set opencti.adminTokenExistingSecret)" .Values.opencti.adminToken | quote }}
+{{- end }}
+{{- if not .Values.opencti.adminPasswordExistingSecret }}
+admin-password: {{ required "opencti.adminPassword is required (or set opencti.adminPasswordExistingSecret)" .Values.opencti.adminPassword | quote }}
+{{- end }}
+{{- if not .Values.opencti.encryptionKeyExistingSecret }}
+encryption-key: {{ required "opencti.encryptionKey is required since OpenCTI 7 (generate with: openssl rand -base64 32), or set opencti.encryptionKeyExistingSecret" .Values.opencti.encryptionKey | quote }}
+{{- end }}
+{{- if and .Values.opencti.healthAccessKey (not .Values.opencti.healthAccessKeyExistingSecret) }}
+health-access-key: {{ .Values.opencti.healthAccessKey | quote }}
+{{- end }}
+{{- if .Values.externalRabbitmq.enabled }}
+{{- if not .Values.externalRabbitmq.existingSecret }}
+rabbitmq-password: {{ required "externalRabbitmq.password is required (or set externalRabbitmq.existingSecret)" .Values.externalRabbitmq.password | quote }}
+{{- end }}
+{{- else if and .Values.rabbitmq.enabled (not .Values.rabbitmq.auth.existingSecret) }}
+rabbitmq-password: {{ required "rabbitmq.auth.password is required (or set rabbitmq.auth.existingSecret)" .Values.rabbitmq.auth.password | quote }}
+{{- end }}
+{{- if and (not .Values.redis.enabled) .Values.externalRedis.password (not .Values.externalRedis.existingSecret) }}
+redis-password: {{ .Values.externalRedis.password | quote }}
+{{- end }}
+{{- if and .Values.externalElasticsearch.enabled .Values.externalElasticsearch.password (not .Values.externalElasticsearch.existingSecret) }}
+elasticsearch-password: {{ .Values.externalElasticsearch.password | quote }}
+{{- end }}
+{{- if .Values.externalS3.enabled }}
+{{- if not .Values.externalS3.existingSecret }}
+s3-access-key: {{ required "externalS3.accessKey is required (or set externalS3.existingSecret)" .Values.externalS3.accessKey | quote }}
+s3-secret-key: {{ required "externalS3.secretKey is required (or set externalS3.existingSecret)" .Values.externalS3.secretKey | quote }}
+{{- end }}
+{{- else if .Values.rustfs.enabled }}
+s3-access-key: {{ required "rustfs.secret.rustfs.access_key is required" .Values.rustfs.secret.rustfs.access_key | quote }}
+s3-secret-key: {{ required "rustfs.secret.rustfs.secret_key is required (or disable rustfs and use externalS3)" .Values.rustfs.secret.rustfs.secret_key | quote }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -211,41 +337,35 @@ Build the auto-wired environment variables for the server
 - name: APP__ADMIN__EMAIL
   value: {{ .Values.opencti.adminEmail | quote }}
 - name: APP__ADMIN__PASSWORD
-  {{- if .Values.opencti.adminPasswordExistingSecret }}
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.opencti.adminPasswordExistingSecret.name }}
-      key: {{ .Values.opencti.adminPasswordExistingSecret.key | default "password" }}
-  {{- else }}
-  value: {{ required "opencti.adminPassword is required" .Values.opencti.adminPassword | quote }}
-  {{- end }}
+  {{- include "opencti.secretRef" (dict "root" . "existing" .Values.opencti.adminPasswordExistingSecret "defaultKey" "password" "chartKey" "admin-password") | nindent 2 }}
 - name: APP__ADMIN__TOKEN
-  {{- if .Values.opencti.adminTokenExistingSecret }}
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.opencti.adminTokenExistingSecret.name }}
-      key: {{ .Values.opencti.adminTokenExistingSecret.key | default "token" }}
-  {{- else }}
-  value: {{ include "opencti.adminToken" . | quote }}
-  {{- end }}
+  {{- include "opencti.adminTokenRef" . | nindent 2 }}
+- name: APP__ENCRYPTION_KEY
+  {{- include "opencti.secretRef" (dict "root" . "existing" .Values.opencti.encryptionKeyExistingSecret "defaultKey" "encryption-key" "chartKey" "encryption-key") | nindent 2 }}
+- name: APP__HEALTH_ACCESS_KEY
+  {{- include "opencti.healthAccessKeyRef" . | nindent 2 }}
 - name: APP__BASE_PATH
   value: {{ .Values.opencti.basePath | default "/" | quote }}
-- name: APP__HEALTH_ACCESS_KEY
-  value: {{ include "opencti.healthAccessKey" . | quote }}
 - name: APP__TELEMETRY__METRICS__ENABLED
-  value: {{ .Values.opencti.metrics.enabled | default true | quote }}
+  value: {{ .Values.opencti.metrics.enabled | quote }}
+- name: APP__APP_LOGS__LOGS_FILES
+  value: "false"
+- name: APP__AUDIT_LOGS__LOGS_FILES
+  value: "false"
 - name: NODE_OPTIONS
   value: {{ .Values.server.nodeOptions | default "--max-old-space-size=8096" | quote }}
 # -- Auto-wired: Elasticsearch/OpenSearch
 - name: ELASTICSEARCH__URL
-  value: {{ include "opencti.elasticsearchUrl" . | quote }}
+  value: {{ include "opencti.elasticsearchUrl" . | trim | quote }}
+{{- if .Values.externalElasticsearch.enabled }}
 {{- if .Values.externalElasticsearch.username }}
 - name: ELASTICSEARCH__USERNAME
   value: {{ .Values.externalElasticsearch.username | quote }}
 {{- end }}
-{{- if .Values.externalElasticsearch.password }}
+{{- if or .Values.externalElasticsearch.password .Values.externalElasticsearch.existingSecret }}
 - name: ELASTICSEARCH__PASSWORD
-  value: {{ .Values.externalElasticsearch.password | quote }}
+  {{- include "opencti.secretRef" (dict "root" . "existing" .Values.externalElasticsearch.existingSecret "defaultKey" "password" "chartKey" "elasticsearch-password") | nindent 2 }}
+{{- end }}
 {{- end }}
 # -- Auto-wired: Redis
 - name: REDIS__HOSTNAME
@@ -254,9 +374,9 @@ Build the auto-wired environment variables for the server
   value: {{ include "opencti.redisPort" . | trim | quote }}
 - name: REDIS__MODE
   value: {{ include "opencti.redisMode" . | trim | quote }}
-{{- if .Values.externalRedis.password }}
+{{- if and (not .Values.redis.enabled) (or .Values.externalRedis.password .Values.externalRedis.existingSecret) }}
 - name: REDIS__PASSWORD
-  value: {{ .Values.externalRedis.password | quote }}
+  {{- include "opencti.secretRef" (dict "root" . "existing" .Values.externalRedis.existingSecret "defaultKey" "password" "chartKey" "redis-password") | nindent 2 }}
 {{- end }}
 # -- Auto-wired: RabbitMQ
 - name: RABBITMQ__HOSTNAME
@@ -267,55 +387,25 @@ Build the auto-wired environment variables for the server
   value: {{ include "opencti.rabbitmqManagementPort" . | trim | quote }}
 - name: RABBITMQ__USERNAME
   value: {{ include "opencti.rabbitmqUsername" . | trim | quote }}
-{{- if .Values.externalRabbitmq.password }}
 - name: RABBITMQ__PASSWORD
-  value: {{ .Values.externalRabbitmq.password | quote }}
-{{- else if .Values.rabbitmq.enabled }}
-- name: RABBITMQ__PASSWORD
-  {{- if .Values.rabbitmq.auth.existingSecret }}
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.rabbitmq.auth.existingSecret.name }}
-      key: {{ .Values.rabbitmq.auth.existingSecret.key | default "rabbitmq-password" }}
-  {{- else }}
-  value: {{ .Values.rabbitmq.auth.password | quote }}
-  {{- end }}
-{{- end }}
-# -- Auto-wired: MinIO/S3
+  {{- include "opencti.rabbitmqPasswordRef" . | nindent 2 }}
+# -- Auto-wired: S3 (RustFS subchart, Garage, AWS, ...). OpenCTI names these settings MINIO__*.
 - name: MINIO__ENDPOINT
   value: {{ include "opencti.minioEndpoint" . | trim | quote }}
 - name: MINIO__PORT
-  {{- if and .Values.externalS3.enabled .Values.externalS3.port }}
-  value: {{ .Values.externalS3.port | quote }}
-  {{- else }}
-  value: "9000"
-  {{- end }}
-{{- if or .Values.externalS3.accessKey .Values.minio.enabled }}
+  value: {{ ternary (.Values.externalS3.port | default 9000) 9000 .Values.externalS3.enabled | quote }}
 - name: MINIO__ACCESS_KEY
-  {{- if .Values.externalS3.enabled }}
-  value: {{ .Values.externalS3.accessKey | quote }}
-  {{- else }}
-  value: {{ .Values.minio.rootUser | default "minioadmin" | quote }}
-  {{- end }}
+  {{- include "opencti.secretRef" (dict "root" . "existing" (ternary .Values.externalS3.existingSecret nil .Values.externalS3.enabled) "defaultKey" (dig "accessKeyKey" "access-key" (.Values.externalS3.existingSecret | default dict)) "chartKey" "s3-access-key") | nindent 2 }}
 - name: MINIO__SECRET_KEY
-  {{- if .Values.externalS3.enabled }}
-  value: {{ .Values.externalS3.secretKey | quote }}
-  {{- else }}
-  value: {{ .Values.minio.rootPassword | default "minioadmin" | quote }}
-  {{- end }}
-{{- end }}
+  {{- include "opencti.secretRef" (dict "root" . "existing" (ternary .Values.externalS3.existingSecret nil .Values.externalS3.enabled) "defaultKey" (dig "secretKeyKey" "secret-key" (.Values.externalS3.existingSecret | default dict)) "chartKey" "s3-secret-key") | nindent 2 }}
 - name: MINIO__BUCKET_NAME
-  value: {{ if .Values.externalS3.enabled }}{{ .Values.externalS3.bucketName | default "opencti-bucket" | quote }}{{ else }}{{ "opencti-bucket" | quote }}{{ end }}
-{{- if .Values.externalS3.region }}
+  value: {{ ternary (.Values.externalS3.bucketName | default "opencti-bucket") "opencti-bucket" .Values.externalS3.enabled | quote }}
+{{- if and .Values.externalS3.enabled .Values.externalS3.region }}
 - name: MINIO__BUCKET_REGION
   value: {{ .Values.externalS3.region | quote }}
 {{- end }}
 - name: MINIO__USE_SSL
-  {{- if and .Values.externalS3.enabled .Values.externalS3.useSSL }}
-  value: "true"
-  {{- else }}
-  value: "false"
-  {{- end }}
+  value: {{ and .Values.externalS3.enabled .Values.externalS3.useSSL | ternary "true" "false" | quote }}
 # -- Auth provider
 - name: PROVIDERS__LOCAL__STRATEGY
   value: "LocalStrategy"
@@ -328,16 +418,9 @@ Build the auto-wired environment variables for workers
 - name: OPENCTI_URL
   value: {{ include "opencti.serverUrl" . | quote }}
 - name: OPENCTI_TOKEN
-  {{- if .Values.opencti.adminTokenExistingSecret }}
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.opencti.adminTokenExistingSecret.name }}
-      key: {{ .Values.opencti.adminTokenExistingSecret.key | default "token" }}
-  {{- else }}
-  value: {{ include "opencti.adminToken" . | quote }}
-  {{- end }}
+  {{- include "opencti.adminTokenRef" . | nindent 2 }}
 {{- if .Values.worker.logLevel }}
-- name: OPENCTI_LOG_LEVEL
+- name: WORKER_LOG_LEVEL
   value: {{ .Values.worker.logLevel | quote }}
 {{- end }}
 {{- if .Values.worker.telemetry.enabled }}
@@ -355,19 +438,19 @@ Build the auto-wired environment variables for a connector
 - name: OPENCTI_URL
   value: {{ include "opencti.serverUrl" .root | quote }}
 - name: OPENCTI_TOKEN
-  {{- if .root.Values.opencti.connectorTokenExistingSecret }}
-  valueFrom:
-    secretKeyRef:
-      name: {{ .root.Values.opencti.connectorTokenExistingSecret.name }}
-      key: {{ .root.Values.opencti.connectorTokenExistingSecret.key | default "token" }}
-  {{- else if .root.Values.opencti.adminTokenExistingSecret }}
-  valueFrom:
-    secretKeyRef:
-      name: {{ .root.Values.opencti.adminTokenExistingSecret.name }}
-      key: {{ .root.Values.opencti.adminTokenExistingSecret.key | default "token" }}
-  {{- else }}
-  value: {{ include "opencti.adminToken" .root | quote }}
-  {{- end }}
+  {{- include "opencti.connectorTokenRef" .root | nindent 2 }}
+{{- end }}
+
+{{/*
+Health probe handler. Runs inside the server container so the access key is
+read from the environment (a Secret) instead of being written into the pod spec.
+*/}}
+{{- define "opencti.healthProbe" -}}
+exec:
+  command:
+    - node
+    - -e
+    - {{ printf "require('http').get({host:'127.0.0.1',port:%v,path:'%s/health?health_access_key='+encodeURIComponent(process.env.APP__HEALTH_ACCESS_KEY)},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))" (.Values.server.service.targetPort | default 4000) (include "opencti.basePathPrefix" .) | quote }}
 {{- end }}
 
 {{/*
@@ -375,23 +458,47 @@ readyChecker init container — checks if a host:port is reachable
 */}}
 {{- define "opencti.readyChecker" -}}
 - name: ready-checker-{{ .name }}
-  image: {{ $.image | default "busybox:1.37" }}
+  image: {{ .root.Values.readyChecker.image | default "busybox:1.37" }}
   imagePullPolicy: IfNotPresent
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 65534
   command:
     - sh
     - -c
     - |
       RETRY=0
-      MAX={{ $.retries | default 60 }}
+      MAX={{ .root.Values.readyChecker.retries | default 60 }}
       until [ $RETRY -eq $MAX ]; do
-        if nc -zv {{ .host }} {{ .port }} 2>&1; then
-          echo "✅ {{ .name }} ({{ .host }}:{{ .port }}) is ready"
+        if nc -z -w 3 {{ .host }} {{ .port }} 2>&1; then
+          echo "{{ .name }} ({{ .host }}:{{ .port }}) is ready"
           exit 0
         fi
-        echo "⏳ [$RETRY/$MAX] waiting for {{ .name }} ({{ .host }}:{{ .port }})..."
-        sleep {{ $.timeout | default 5 }}
+        echo "[$RETRY/$MAX] waiting for {{ .name }} ({{ .host }}:{{ .port }})..."
+        sleep {{ .root.Values.readyChecker.timeout | default 5 }}
         RETRY=$((RETRY + 1))
       done
-      echo "❌ {{ .name }} ({{ .host }}:{{ .port }}) not ready after $MAX retries"
+      echo "{{ .name }} ({{ .host }}:{{ .port }}) not ready after $MAX retries"
       exit 1
+{{- end }}
+
+{{/*
+readyChecker init containers for every backend the server depends on
+*/}}
+{{- define "opencti.dependencyCheckers" -}}
+{{- if .Values.externalElasticsearch.enabled }}
+{{- $es := urlParse .Values.externalElasticsearch.url }}
+{{- $esHost := regexReplaceAll ":[0-9]+$" $es.host "" }}
+{{- $esPort := regexFind "[0-9]+$" (regexFind ":[0-9]+$" $es.host) | default (ternary "443" "9200" (eq $es.scheme "https")) }}
+{{ include "opencti.readyChecker" (dict "root" . "name" "elasticsearch" "host" $esHost "port" $esPort) }}
+{{- else if .Values.opensearch.enabled }}
+{{ include "opencti.readyChecker" (dict "root" . "name" "opensearch" "host" (include "opencti.opensearchHost" .) "port" 9200) }}
+{{- end }}
+{{ include "opencti.readyChecker" (dict "root" . "name" "rabbitmq" "host" (include "opencti.rabbitmqHostname" . | trim) "port" (include "opencti.rabbitmqPort" . | trim)) }}
+{{ include "opencti.readyChecker" (dict "root" . "name" "redis" "host" (include "opencti.redisHostname" . | trim) "port" (include "opencti.redisPort" . | trim)) }}
+{{ include "opencti.readyChecker" (dict "root" . "name" "s3" "host" (include "opencti.minioEndpoint" . | trim) "port" (ternary (.Values.externalS3.port | default 9000) 9000 .Values.externalS3.enabled)) }}
 {{- end }}

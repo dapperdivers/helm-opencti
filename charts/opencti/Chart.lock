@@ -2,8 +2,11 @@ dependencies:
 - name: opensearch
   repository: https://opensearch-project.github.io/helm-charts/
   version: 3.4.0
-- name: minio
-  repository: https://charts.min.io/
-  version: 5.4.0
-digest: sha256:6075f7bc61752db2fd7f0f5ce067e9300bdaba43c33b4659fbf73357d989e296
-generated: "2026-02-11T11:44:24.705465535-06:00"
+- name: rustfs
+  repository: https://charts.rustfs.com
+  version: 1.0.6
+- name: dragonfly
+  repository: oci://ghcr.io/dragonflydb/dragonfly/helm
+  version: v2.1.0
+digest: sha256:f239701dea15dc440c995ecaba27be7c2280239807ea282c39ffe8bc3651c0bd
+generated: "2026-11-19T13:16:01.319915465-06:00"

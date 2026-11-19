@@ -1,0 +1,17 @@
+{{- if .Values.server.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "opencti.fullname" . }}-server
+  labels:
+    {{- include "opencti.serverLabels" . | nindent 4 }}
+spec:
+  {{- if not (kindIs "invalid" .Values.server.podDisruptionBudget.minAvailable) }}
+  minAvailable: {{ .Values.server.podDisruptionBudget.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.server.podDisruptionBudget.maxUnavailable | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "opencti.serverSelectorLabels" . | nindent 6 }}
+{{- end }}
