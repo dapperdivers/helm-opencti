@@ -191,6 +191,10 @@ spec:
 | Connectors (×8) | 0.8 | 2–4Gi | — |
 | **Total** | **~7** | **~13–23Gi** | **~130Gi** |
 
+## Upgrading to 0.5.1
+
+- The OpenSearch init containers (`opensearch.persistence`, `opensearch.sysctlInit`) are now pinned to `busybox:1.37` instead of the subchart's `busybox:latest`. No action needed.
+
 ## Upgrading to 0.5.0
 
 - **OpenCTI 7.** Read the upstream [breaking changes](https://docs.opencti.io/latest/deployment/breaking-changes/) first: SSO configured through environment variables no longer works on Community Edition, and existing API tokens are migrated and encrypted.
